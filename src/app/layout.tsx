@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   description: "Track, discover, and remember every movie you love. Your personal movie companion.",
   keywords: ["movies", "watchlist", "movie tracker", "film", "cinema", "streaming"],
   authors: [{ name: "Replay" }],
+  manifest: "/manifest.json",
   icons: {
     icon: "/logo.png",
     apple: "/logo.png",

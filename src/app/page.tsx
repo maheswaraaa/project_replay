@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Loader2,
   Film,
-  Settings,
+  Clapperboard,
+  MonitorPlay,
   BookmarkPlus,
   Filter,
   Sparkles,
@@ -45,10 +46,28 @@ import {
   GENRES,
   LANGUAGES,
   WATCH_PROVIDERS,
+  // TV Show imports
+  getTrendingTV,
+  getPopularTV,
+  getTopRatedTV,
+  getOnTheAirTV,
+  discoverTV,
+  getTVShowDetails,
+  getTVShowCredits,
+  getTVWatchProviders,
+  searchTV,
+  searchMulti,
+  TV_GENRES,
   type Movie,
   type MovieDetail,
+  type TVShow,
+  type TVShowDetail,
   type CastMember,
   type WatchProvider,
+  type MediaType,
+  isTVShow,
+  getMediaTitle,
+  getMediaDate,
 } from "@/lib/tmdb";
 
 type Tab = "trending" | "popular" | "top_rated" | "now_playing";
@@ -94,6 +113,19 @@ export default function HomePage() {
   // View mode state (grid or list)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
+  // Media type filter state (movie, tv, or all)
+  const [activeMediaType, setActiveMediaType] = useState<MediaType>("movie");
+
+  // Mobile filter sheet state
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  // Selected TV show for modal
+  const [selectedTVShow, setSelectedTVShow] = useState<TVShowDetail | null>(null);
+
+  // Library content state - dedicated storage for library items
+  const [libraryMovies, setLibraryMovies] = useState<Movie[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -107,44 +139,127 @@ export default function HomePage() {
     if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
   }, []);
 
-  // Fetch movies based on active filters
-  const fetchMovies = useCallback(async (pageNum: number, reset: boolean = false) => {
+  // Fetch content (movies or TV shows) based on active filters and media type
+  const fetchContent = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (pageNum === 1) setLoading(true);
     else setLoadingMore(true);
 
     try {
-      let response;
+      let response: { page: number; results: Movie[]; total_pages: number; total_results: number };
       const hasFilters = activeGenre || activeYear || activeLanguage || activeProvider || activeSortBy !== "popularity.desc";
+      const isTV = activeMediaType === "tv";
 
       if (searchQuery && activeNav === "search") {
-        response = await searchMovies(searchQuery, pageNum);
+        // Search with filters active
+        if (isTV) {
+          const tvResponse = await searchTV(searchQuery, pageNum);
+          // Transform TV results to Movie-like structure for unified handling
+          response = {
+            ...tvResponse,
+            results: tvResponse.results.map(tv => ({
+              ...tv,
+              title: tv.name,
+              original_title: tv.original_name,
+              release_date: tv.first_air_date,
+              media_type: "tv" as const,
+            })) as unknown as Movie[]
+          };
+        } else {
+          response = await searchMovies(searchQuery, pageNum);
+        }
+
+        // Apply client-side filters to search results
+        response = {
+          ...response,
+          results: response.results.filter(m => {
+            // Year filter
+            if (activeYear) {
+              const releaseYear = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
+              if (releaseYear !== activeYear) return false;
+            }
+            // Language filter
+            if (activeLanguage && m.original_language !== activeLanguage) return false;
+            // Genre filter
+            if (activeGenre && !m.genre_ids?.includes(activeGenre)) return false;
+            return true;
+          })
+        };
       } else if (hasFilters) {
         // Use discover endpoint when any filter is active
-        response = await discoverMovies({
-          genreId: activeGenre,
-          year: activeYear,
-          language: activeLanguage,
-          watchProviders: activeProvider,
-          sortBy: activeSortBy,
-          page: pageNum,
-        });
+        if (isTV) {
+          const tvResponse = await discoverTV({
+            genreId: activeGenre,
+            year: activeYear,
+            language: activeLanguage,
+            watchProviders: activeProvider,
+            sortBy: activeSortBy,
+            page: pageNum,
+          });
+          response = {
+            ...tvResponse,
+            results: tvResponse.results.map(tv => ({
+              ...tv,
+              title: tv.name,
+              original_title: tv.original_name,
+              release_date: tv.first_air_date,
+              media_type: "tv" as const,
+            })) as unknown as Movie[]
+          };
+        } else {
+          response = await discoverMovies({
+            genreId: activeGenre,
+            year: activeYear,
+            language: activeLanguage,
+            watchProviders: activeProvider,
+            sortBy: activeSortBy,
+            page: pageNum,
+          });
+        }
       } else {
-        switch (activeTab) {
-          case "popular":
-            response = await getPopular(pageNum);
-            break;
-          case "top_rated":
-            response = await getTopRated(pageNum);
-            break;
-          case "now_playing":
-            response = await getNowPlaying(pageNum);
-            break;
-          default:
-            response = await getTrending("week", pageNum);
+        // Default tab-based fetching
+        if (isTV) {
+          let tvResponse;
+          switch (activeTab) {
+            case "popular":
+              tvResponse = await getPopularTV(pageNum);
+              break;
+            case "top_rated":
+              tvResponse = await getTopRatedTV(pageNum);
+              break;
+            case "now_playing":
+              tvResponse = await getOnTheAirTV(pageNum);
+              break;
+            default:
+              tvResponse = await getTrendingTV("week", pageNum);
+          }
+          response = {
+            ...tvResponse,
+            results: tvResponse.results.map(tv => ({
+              ...tv,
+              title: tv.name,
+              original_title: tv.original_name,
+              release_date: tv.first_air_date,
+              media_type: "tv" as const,
+            })) as unknown as Movie[]
+          };
+        } else {
+          switch (activeTab) {
+            case "popular":
+              response = await getPopular(pageNum);
+              break;
+            case "top_rated":
+              response = await getTopRated(pageNum);
+              break;
+            case "now_playing":
+              response = await getNowPlaying(pageNum);
+              break;
+            default:
+              response = await getTrending("week", pageNum);
+          }
         }
       }
 
-      // Filter movies that have poster images
+      // Filter content that has poster images
       let newMovies = response.results.filter(m => m.poster_path);
 
       // Client-side filtering to ensure results match filter criteria
@@ -166,7 +281,7 @@ export default function HomePage() {
       if (reset || pageNum === 1) {
         setMovies(newMovies);
       } else {
-        // Deduplicate: only add movies that don't already exist
+        // Deduplicate: only add content that doesn't already exist
         setMovies(prev => {
           const existingIds = new Set(prev.map(m => m.id));
           const uniqueNewMovies = newMovies.filter(m => !existingIds.has(m.id));
@@ -177,20 +292,20 @@ export default function HomePage() {
       setHasMore(response.page < response.total_pages);
       setPage(response.page);
     } catch (error) {
-      console.error("Failed to fetch movies:", error);
+      console.error("Failed to fetch content:", error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, searchQuery, activeNav]);
+  }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, searchQuery, activeNav, activeMediaType]);
 
   // Initial load and filter changes
   useEffect(() => {
     if (activeNav === "library" || activeNav === "profile") return;
     setPage(1);
     setMovies([]);
-    fetchMovies(1, true);
-  }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, activeNav, fetchMovies]);
+    fetchContent(1, true);
+  }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, activeNav, activeMediaType, fetchContent]);
 
   // Search with debounce
   useEffect(() => {
@@ -200,14 +315,73 @@ export default function HomePage() {
       if (searchQuery) {
         setPage(1);
         setMovies([]);
-        fetchMovies(1, true);
+        fetchContent(1, true);
       } else {
         setMovies([]);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, activeNav, fetchMovies]);
+  }, [searchQuery, activeNav, fetchContent]);
+
+  // Fetch library content when entering Library tab
+  useEffect(() => {
+    const fetchLibraryContent = async () => {
+      if (activeNav !== "library") return;
+
+      // Get all unique IDs from library lists
+      const allIds = [...new Set([...watchlist, ...watched, ...favorites])];
+
+      if (allIds.length === 0) {
+        setLibraryMovies([]);
+        return;
+      }
+
+      setLibraryLoading(true);
+
+      // We'll fetch all items and let the state update handle deduplication
+      const newItems = await Promise.all(
+        allIds.map(async (id) => {
+          try {
+            // Try as movie first
+            const details = await getMovieDetails(id);
+            return { ...details, media_type: "movie" } as Movie;
+          } catch {
+            try {
+              // Try as TV show if movie fails
+              const details = await getTVShowDetails(id);
+              return {
+                id: details.id,
+                title: details.name,
+                original_title: details.original_name,
+                poster_path: details.poster_path,
+                backdrop_path: details.backdrop_path,
+                overview: details.overview,
+                vote_average: details.vote_average,
+                vote_count: details.vote_count || 0,
+                popularity: details.popularity || 0,
+                adult: false,
+                release_date: details.first_air_date,
+                genre_ids: details.genres?.map(g => g.id) || [],
+                original_language: details.original_language,
+                media_type: "tv" as unknown,
+              } as unknown as Movie;
+            } catch {
+              // Item not found - might have been removed from TMDB
+              return null;
+            }
+          }
+        })
+      );
+
+      // Set library movies (replaces old state)
+      const validItems = newItems.filter(Boolean) as Movie[];
+      setLibraryMovies(validItems);
+      setLibraryLoading(false);
+    };
+
+    fetchLibraryContent();
+  }, [activeNav, watchlist, watched, favorites]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -216,7 +390,7 @@ export default function HomePage() {
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loadingMore) {
-          fetchMovies(page + 1);
+          fetchContent(page + 1);
         }
       },
       { threshold: 0.1 }
@@ -227,13 +401,14 @@ export default function HomePage() {
     }
 
     return () => observerRef.current?.disconnect();
-  }, [loading, hasMore, loadingMore, page, fetchMovies, activeNav]);
+  }, [loading, hasMore, loadingMore, page, fetchContent, activeNav]);
 
   // Open movie detail modal
   const openMovieDetail = async (movieId: number) => {
     setLoadingModal(true);
     setShowModal(true);
     setMovieWatchProviders([]);
+    setSelectedTVShow(null); // Clear any TV show
     document.body.style.overflow = "hidden";
 
     try {
@@ -258,9 +433,61 @@ export default function HomePage() {
     }
   };
 
+  // Open TV show detail modal
+  const openTVDetail = async (tvId: number) => {
+    setLoadingModal(true);
+    setShowModal(true);
+    setMovieWatchProviders([]);
+    setSelectedMovie(null); // Clear any movie
+    document.body.style.overflow = "hidden";
+
+    try {
+      const [details, credits, watchProviders] = await Promise.all([
+        getTVShowDetails(tvId),
+        getTVShowCredits(tvId),
+        getTVWatchProviders(tvId),
+      ]);
+      setSelectedTVShow(details);
+      setMovieCast(credits.cast.slice(0, 10));
+
+      // Get US watch providers (flatrate = subscription streaming)
+      const usProviders = watchProviders.results?.US;
+      if (usProviders?.flatrate) {
+        setMovieWatchProviders(usProviders.flatrate);
+      }
+    } catch (error) {
+      console.error("Failed to fetch TV show details:", error);
+      closeModal();
+    } finally {
+      setLoadingModal(false);
+    }
+  };
+
+  // Handle opening detail based on media type
+  const openDetail = (item: Movie) => {
+    // Validate the item and ID
+    if (!item || typeof item.id !== 'number') {
+      console.error("Invalid item passed to openDetail:", item);
+      return;
+    }
+
+    const itemId = item.id;
+
+    // Check if this item is a TV show - prioritize item's own media_type over global filter
+    const itemMediaType = (item as unknown as { media_type?: string }).media_type;
+    const isTV = itemMediaType === "tv" || (itemMediaType === undefined && activeMediaType === "tv");
+
+    if (isTV) {
+      openTVDetail(itemId);
+    } else {
+      openMovieDetail(itemId);
+    }
+  };
+
   const closeModal = () => {
     setShowModal(false);
     setSelectedMovie(null);
+    setSelectedTVShow(null);
     setMovieCast([]);
     setMovieWatchProviders([]);
     document.body.style.overflow = "auto";
@@ -345,6 +572,19 @@ export default function HomePage() {
       );
     }
 
+    // Media type filter (Movies vs TV Shows) - applies in Library
+    if (activeNav === "library" && activeMediaType !== "all") {
+      filtered = filtered.filter(m => {
+        const itemMediaType = (m as unknown as { media_type?: string }).media_type;
+        if (activeMediaType === "movie") {
+          return itemMediaType === "movie" || itemMediaType === undefined;
+        } else if (activeMediaType === "tv") {
+          return itemMediaType === "tv";
+        }
+        return true;
+      });
+    }
+
     if (activeGenre) {
       filtered = filtered.filter(m => m.genre_ids?.includes(activeGenre));
     }
@@ -410,7 +650,7 @@ export default function HomePage() {
         {movieList.map((movie, index) => (
           <div
             key={`${movie.id}-${index}`}
-            onClick={() => openMovieDetail(movie.id)}
+            onClick={() => openDetail(movie)}
             className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-bg)]"
           >
             {movie.poster_path ? (
@@ -522,7 +762,7 @@ export default function HomePage() {
           <MovieListItem
             key={movie.id}
             movie={movie}
-            onOpenDetail={() => openMovieDetail(movie.id)}
+            onOpenDetail={() => openDetail(movie)}
             onAddWatchlist={() => toggleWatchlist(movie.id)}
             onMarkWatched={() => markAsWatched(movie.id)}
             onToggleFavorite={() => toggleFavorite(movie.id)}
@@ -748,7 +988,7 @@ export default function HomePage() {
                   setSearchQuery("");
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className="flex items-center gap-2 hover:opacity-70 transition-opacity flex-shrink-0"
+                className="flex items-center gap-1.5 hover:opacity-70 transition-opacity flex-shrink-0"
               >
                 <Image
                   src="/logo.png"
@@ -758,7 +998,8 @@ export default function HomePage() {
                   className="invert"
                   priority
                 />
-                <span className="text-base font-semibold text-[var(--foreground)] hidden sm:block">Replay</span>
+                <span className="text-sm font-bold text-[var(--foreground)]">Replay</span>
+                <span className="text-[10px] text-[var(--muted)]">— Discover. Watch. Remember.</span>
               </button>
 
               {/* Divider */}
@@ -789,35 +1030,77 @@ export default function HomePage() {
                 </nav>
               )}
 
-              {/* Search Bar - Expands with smooth animation */}
-              <motion.div
-                className="flex-1 max-w-md"
-                initial={false}
-                animate={{
-                  maxWidth: (activeNav === "search" || activeNav === "library") ? "100%" : "20rem"
-                }}
-                transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-              >
-                <div className="relative group">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] group-focus-within:text-[var(--foreground)] transition-colors duration-200" />
-                  <input
-                    type="text"
-                    placeholder={activeNav === "library" ? "Filter library..." : "Search..."}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => {
-                      // Only redirect to search if on Home page, not Library
-                      if (activeNav === "home") {
-                        setActiveNav("search");
-                      }
-                    }}
-                    className="w-full pl-9 pr-3 py-2 bg-[var(--card-bg)]/50 border border-transparent rounded-lg text-sm text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:bg-[var(--card-bg)] focus:border-[var(--card-border)]/30 transition-all duration-300 ease-out"
-                  />
-                </div>
-              </motion.div>
+              {/* Library Filter - Only shown when in Library tab on desktop */}
+              {activeNav === "library" && (
+                <motion.div
+                  className="hidden lg:block flex-1 max-w-md"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="relative group">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] group-focus-within:text-[var(--foreground)] transition-colors duration-200" />
+                    <input
+                      type="text"
+                      placeholder="Filter library..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-[var(--card-bg)]/50 border border-transparent rounded-lg text-sm text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:bg-[var(--card-bg)] focus:border-[var(--card-border)]/30 transition-all duration-300 ease-out"
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Search Bar - Only shown when in Search tab on desktop */}
+              {activeNav === "search" && (
+                <motion.div
+                  className="hidden lg:block flex-1 max-w-xl"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="relative group">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] group-focus-within:text-[var(--foreground)] transition-colors duration-200" />
+                    <input
+                      type="text"
+                      placeholder="Search movies & TV shows..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-[var(--card-bg)]/50 border border-transparent rounded-lg text-sm text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:bg-[var(--card-bg)] focus:border-[var(--card-border)]/30 transition-all duration-300 ease-out"
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Spacer - pushes filter chips to the right */}
+              {activeNav !== "library" && activeNav !== "search" && <div className="flex-1" />}
 
               {/* Filter Chips */}
               <div className="hidden lg:flex items-center gap-1.5">
+                {/* Media Type Toggle */}
+                <div className="flex flex-nowrap rounded-full bg-[var(--card-bg)]/60 p-0.5 shrink-0">
+                  <button
+                    onClick={() => setActiveMediaType("movie")}
+                    className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-all duration-200 ${activeMediaType === "movie"
+                      ? "bg-[var(--foreground)] text-[var(--background)]"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                  >
+                    <Clapperboard size={10} />
+                    Movies
+                  </button>
+                  <button
+                    onClick={() => setActiveMediaType("tv")}
+                    className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-all duration-200 ${activeMediaType === "tv"
+                      ? "bg-[var(--foreground)] text-[var(--background)]"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                  >
+                    <MonitorPlay size={10} />
+                    TV Shows
+                  </button>
+                </div>
+
                 {/* Year */}
                 <div className="relative">
                   <select
@@ -836,7 +1119,7 @@ export default function HomePage() {
                   <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {/* Genre */}
+                {/* Genre - Uses different genres for movies vs TV */}
                 <div className="relative">
                   <select
                     value={activeGenre || ""}
@@ -847,7 +1130,7 @@ export default function HomePage() {
                       }`}
                   >
                     <option value="">Genre</option>
-                    {GENRES.map((genre) => (
+                    {(activeMediaType === "tv" ? TV_GENRES : GENRES).map((genre) => (
                       <option key={genre.id} value={genre.id}>{genre.name}</option>
                     ))}
                   </select>
@@ -915,10 +1198,10 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {/* Library Button */}
+              {/* Library Button - Only show on desktop, mobile has bottom nav */}
               <button
                 onClick={() => setActiveNav("library")}
-                className={`p-2 rounded-full transition-all duration-200 flex-shrink-0 ${activeNav === "library"
+                className={`hidden lg:flex p-2 rounded-full transition-all duration-200 flex-shrink-0 ${activeNav === "library"
                   ? "bg-[var(--foreground)] text-[var(--background)]"
                   : "text-[var(--muted)] hover:bg-[var(--card-bg)] hover:text-[var(--foreground)]"
                   }`}
@@ -949,10 +1232,42 @@ export default function HomePage() {
                     {tab.label}
                   </button>
                 ))}
+                {/* Mobile Media Type Toggle */}
+                <div className="flex rounded-full bg-[var(--card-bg)]/60 p-0.5 shrink-0">
+                  <button
+                    onClick={() => setActiveMediaType("movie")}
+                    className={`p-1.5 rounded-full transition-all duration-200 ${activeMediaType === "movie"
+                      ? "bg-[var(--foreground)] text-[var(--background)]"
+                      : "text-[var(--muted)]"
+                      }`}
+                  >
+                    <Clapperboard size={14} />
+                  </button>
+                  <button
+                    onClick={() => setActiveMediaType("tv")}
+                    className={`p-1.5 rounded-full transition-all duration-200 ${activeMediaType === "tv"
+                      ? "bg-[var(--foreground)] text-[var(--background)]"
+                      : "text-[var(--muted)]"
+                      }`}
+                  >
+                    <MonitorPlay size={14} />
+                  </button>
+                </div>
                 {/* Mobile Filter Button */}
-                <button className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[var(--card-bg)]/60 text-[var(--muted)] whitespace-nowrap">
+                <button
+                  onClick={() => setShowMobileFilters(true)}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-200 ${(activeGenre || activeYear || activeLanguage || activeProvider)
+                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                    : "bg-[var(--card-bg)]/60 text-[var(--muted)]"
+                    }`}
+                >
                   <Filter size={12} />
                   Filters
+                  {(activeGenre || activeYear || activeLanguage || activeProvider) && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20">
+                      {[activeGenre, activeYear, activeLanguage, activeProvider].filter(Boolean).length}
+                    </span>
+                  )}
                 </button>
               </div>
             )}
@@ -960,14 +1275,14 @@ export default function HomePage() {
         </header>
       )}
 
-      {/* Mobile Search (when search nav active) - Also hidden on Profile */}
-      {activeNav !== "profile" && activeNav === "search" && (
-        <div className="md:hidden sticky top-14 z-30 bg-[var(--background)] px-4 py-3 border-b border-[var(--card-border)]">
+      {/* Mobile Search Bar - Only for Search tab, hidden on other views */}
+      {activeNav === "search" && (
+        <div className="lg:hidden sticky top-14 z-30 bg-[var(--background)] px-4 py-3 border-b border-[var(--card-border)]">
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
             <input
               type="text"
-              placeholder="Search movies..."
+              placeholder="Search movies & TV shows..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -1009,18 +1324,52 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">Your Library</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-[var(--foreground)]">Your Library</h2>
+
+              {/* Media Type Filter for Library */}
+              <div className="flex rounded-full bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5">
+                <button
+                  onClick={() => setActiveMediaType("movie")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${activeMediaType === "movie"
+                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                >
+                  <Clapperboard size={12} />
+                  Movies
+                </button>
+                <button
+                  onClick={() => setActiveMediaType("tv")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${activeMediaType === "tv"
+                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                >
+                  <MonitorPlay size={12} />
+                  TV Shows
+                </button>
+              </div>
+            </div>
+
+            {/* Loading indicator for library items */}
+            {libraryLoading && (
+              <div className="flex items-center gap-2 mb-4 text-[var(--muted)]">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-sm">Loading library items...</span>
+              </div>
+            )}
 
             {/* Library Tabs */}
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
               {libraryTabs.map((tab) => {
                 const Icon = tab.icon;
-                // Get movies for this tab
+                // Get items for this tab from libraryMovies
                 const tabMovies = tab.key === "watchlist"
-                  ? movies.filter(m => watchlist.includes(m.id))
+                  ? libraryMovies.filter(m => watchlist.includes(m.id))
                   : tab.key === "watched"
-                    ? movies.filter(m => watched.includes(m.id))
-                    : movies.filter(m => favorites.includes(m.id));
+                    ? libraryMovies.filter(m => watched.includes(m.id))
+                    : libraryMovies.filter(m => favorites.includes(m.id));
                 // Filtered count (what's displayed)
                 const filteredCount = applyFilters(tabMovies).length;
                 // Total loaded count
@@ -1089,16 +1438,16 @@ export default function HomePage() {
                   </motion.div>
                 ) : (
                   viewMode === "list" ? (
-                    renderMovieList(applyFilters(movies.filter(m => watchlist.includes(m.id))), false)
+                    renderMovieList(applyFilters(libraryMovies.filter(m => watchlist.includes(m.id))), false)
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-                      {applyFilters(movies.filter(m => watchlist.includes(m.id))).map((movie, index) => (
+                      {applyFilters(libraryMovies.filter(m => watchlist.includes(m.id))).map((movie, index) => (
                         <motion.div
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
-                          onClick={() => openMovieDetail(movie.id)}
+                          onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
                           <Image
@@ -1113,7 +1462,7 @@ export default function HomePage() {
                           </div>
                         </motion.div>
                       ))}
-                      {movies.filter(m => watchlist.includes(m.id)).length === 0 && watchlist.length > 0 && (
+                      {libraryMovies.filter(m => watchlist.includes(m.id)).length === 0 && watchlist.length > 0 && (
                         <div className="col-span-full text-center py-10 text-[var(--muted)]">
                           <p>Loading your watchlist...</p>
                         </div>
@@ -1139,16 +1488,16 @@ export default function HomePage() {
                   </motion.div>
                 ) : (
                   viewMode === "list" ? (
-                    renderMovieList(applyFilters(movies.filter(m => watched.includes(m.id))), false)
+                    renderMovieList(applyFilters(libraryMovies.filter(m => watched.includes(m.id))), false)
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-                      {applyFilters(movies.filter(m => watched.includes(m.id))).map((movie, index) => (
+                      {applyFilters(libraryMovies.filter(m => watched.includes(m.id))).map((movie, index) => (
                         <motion.div
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
-                          onClick={() => openMovieDetail(movie.id)}
+                          onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
                           <Image
@@ -1184,16 +1533,16 @@ export default function HomePage() {
                   </motion.div>
                 ) : (
                   viewMode === "list" ? (
-                    renderMovieList(applyFilters(movies.filter(m => favorites.includes(m.id))), false)
+                    renderMovieList(applyFilters(libraryMovies.filter(m => favorites.includes(m.id))), false)
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-                      {applyFilters(movies.filter(m => favorites.includes(m.id))).map((movie, index) => (
+                      {applyFilters(libraryMovies.filter(m => favorites.includes(m.id))).map((movie, index) => (
                         <motion.div
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
-                          onClick={() => openMovieDetail(movie.id)}
+                          onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
                           <Image
@@ -1219,105 +1568,114 @@ export default function HomePage() {
         {/* Profile Tab */}
         {activeNav === "profile" && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="flex flex-col items-center justify-center min-h-[60vh] py-8"
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="flex flex-col items-center py-4 min-h-[calc(100vh-8rem)]"
           >
-            {/* Logo with Glow Effect - Same as Header */}
+            {/* Compact Logo & Title Row */}
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
-              className="relative mb-8"
+              transition={{ delay: 0.1, duration: 0.4 }}
+              className="flex items-center gap-3 mb-4"
             >
-              {/* Glow Effect */}
-              <div className="absolute inset-0 blur-3xl bg-gradient-to-br from-purple-500/30 via-pink-500/20 to-orange-500/30 rounded-full scale-150" />
-
-              {/* Logo Container */}
-              <div className="relative w-28 h-28 rounded-3xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl flex items-center justify-center">
-                <Image
-                  src="/logo.png"
-                  alt="Replay"
-                  width={64}
-                  height={64}
-                  className="invert"
-                  priority
-                />
+              {/* Logo */}
+              <div className="relative">
+                <div className="absolute inset-0 blur-2xl bg-gradient-to-br from-purple-500/30 via-pink-500/20 to-orange-500/30 rounded-full scale-150" />
+                <div className="relative w-14 h-14 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-lg flex items-center justify-center">
+                  <Image
+                    src="/logo.png"
+                    alt="Replay"
+                    width={32}
+                    height={32}
+                    className="invert"
+                    priority
+                  />
+                </div>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[var(--foreground)]">Replay</h2>
+                <p className="text-xs text-[var(--muted)]">Discover. Watch. Remember.</p>
               </div>
             </motion.div>
 
-            {/* App Title */}
+            {/* Stats Cards - Compact Grid */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="text-center mb-8"
-            >
-              <h2 className="text-3xl font-bold text-[var(--foreground)] mb-2">Replay</h2>
-              <p className="text-sm text-[var(--muted)] tracking-wide">Discover. Watch. Remember.</p>
-            </motion.div>
-
-            {/* Stats Cards - Glassmorphism */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="grid grid-cols-3 gap-4 w-full max-w-sm mb-8"
+              transition={{ delay: 0.2 }}
+              className="grid grid-cols-3 gap-2 w-full max-w-xs mb-4"
             >
               <button
                 onClick={() => { setActiveNav("library"); setActiveLibraryTab("watchlist"); }}
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-4 text-center hover:border-amber-500/40 transition-all duration-300 hover:scale-105"
+                className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-3 text-center hover:border-amber-500/40 transition-all duration-200 hover:scale-102"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <BookmarkPlus size={20} className="mx-auto mb-2 text-amber-500" />
-                <p className="text-2xl font-bold text-[var(--foreground)]">{watchlist.length}</p>
-                <p className="text-xs text-[var(--muted)]">Watchlist</p>
+                <BookmarkPlus size={16} className="mx-auto mb-1 text-amber-500" />
+                <p className="text-lg font-bold text-[var(--foreground)]">{watchlist.length}</p>
+                <p className="text-[10px] text-[var(--muted)]">Watchlist</p>
               </button>
 
               <button
                 onClick={() => { setActiveNav("library"); setActiveLibraryTab("watched"); }}
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 p-4 text-center hover:border-green-500/40 transition-all duration-300 hover:scale-105"
+                className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 p-3 text-center hover:border-green-500/40 transition-all duration-200 hover:scale-102"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Eye size={20} className="mx-auto mb-2 text-green-500" />
-                <p className="text-2xl font-bold text-[var(--foreground)]">{watched.length}</p>
-                <p className="text-xs text-[var(--muted)]">Watched</p>
+                <Eye size={16} className="mx-auto mb-1 text-green-500" />
+                <p className="text-lg font-bold text-[var(--foreground)]">{watched.length}</p>
+                <p className="text-[10px] text-[var(--muted)]">Watched</p>
               </button>
 
               <button
                 onClick={() => { setActiveNav("library"); setActiveLibraryTab("favorites"); }}
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 p-4 text-center hover:border-red-500/40 transition-all duration-300 hover:scale-105"
+                className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 p-3 text-center hover:border-red-500/40 transition-all duration-200 hover:scale-102"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Heart size={20} className="mx-auto mb-2 text-red-500" />
-                <p className="text-2xl font-bold text-[var(--foreground)]">{favorites.length}</p>
-                <p className="text-xs text-[var(--muted)]">Favorites</p>
+                <Heart size={16} className="mx-auto mb-1 text-red-500" />
+                <p className="text-lg font-bold text-[var(--foreground)]">{favorites.length}</p>
+                <p className="text-[10px] text-[var(--muted)]">Favorites</p>
               </button>
             </motion.div>
 
             {/* Explore Button */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="w-full max-w-sm"
+              transition={{ delay: 0.3 }}
+              className="w-full max-w-xs mb-4"
             >
               <button
                 onClick={() => setActiveNav("home")}
-                className="w-full flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-r from-[var(--foreground)] to-[var(--muted)] text-[var(--background)] font-semibold rounded-2xl hover:opacity-90 transition-opacity"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--foreground)] text-[var(--background)] font-semibold rounded-xl hover:opacity-90 transition-opacity"
               >
-                <Sparkles size={18} />
-                Explore Movies
+                <Sparkles size={16} />
+                Explore Movies & TV Shows
               </button>
             </motion.div>
+
+            {/* About Section - Compact */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="w-full max-w-xs p-4 rounded-xl bg-[var(--card-bg)]/50 border border-[var(--card-border)]/30"
+            >
+              <h3 className="text-xs font-semibold text-[var(--foreground)] mb-2">About Replay</h3>
+              <p className="text-[11px] text-[var(--muted)] leading-relaxed mb-2">
+                Your personal movie & TV companion. All data stored <span className="text-[var(--foreground)]">locally on your device</span> — no accounts, no tracking.
+              </p>
+              <p className="text-[9px] text-[var(--muted)]/70">
+                Built with ♥ • Data from TMDB
+              </p>
+            </motion.div>
+
+            {/* Spacer to push footer down */}
+            <div className="flex-1" />
 
             {/* Footer */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
-              className="mt-12 text-xs text-[var(--muted)]"
+              className="text-[10px] text-[var(--muted)]/50 mt-4"
             >
               Powered by TMDB API
             </motion.p>
@@ -1347,6 +1705,241 @@ export default function HomePage() {
                 <div className="flex items-center justify-center h-96">
                   <Loader2 size={32} className="text-[var(--muted)] animate-spin" />
                 </div>
+              ) : selectedTVShow ? (
+                <>
+                  {/* TV Show Backdrop Image */}
+                  <div className="relative h-48 md:h-64">
+                    {selectedTVShow.backdrop_path ? (
+                      <Image
+                        src={getBackdropUrl(selectedTVShow.backdrop_path) || ""}
+                        alt={selectedTVShow.name}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-[var(--card-border)]" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--card-bg)] via-transparent to-transparent" />
+
+                    {/* Close Button */}
+                    <button
+                      onClick={closeModal}
+                      className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors"
+                    >
+                      <X size={20} className="text-white" />
+                    </button>
+
+                    {/* Back Button (mobile) */}
+                    <button
+                      onClick={closeModal}
+                      className="absolute top-4 left-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors md:hidden"
+                    >
+                      <ChevronLeft size={20} className="text-white" />
+                    </button>
+                  </div>
+
+                  {/* TV Show Content */}
+                  <div className="px-5 pb-8 -mt-16 relative overflow-y-auto max-h-[calc(90vh-12rem)]">
+                    <div className="flex gap-4 mb-4">
+                      {/* Poster */}
+                      <div className="relative w-24 h-36 rounded-xl overflow-hidden shadow-xl flex-shrink-0 bg-[var(--card-border)]">
+                        <Image
+                          src={getImageUrl(selectedTVShow.poster_path, "w300") || ""}
+                          alt={selectedTVShow.name}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+
+                      {/* Title & Meta */}
+                      <div className="flex-1 pt-16">
+                        <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedTVShow.name}</h2>
+                        {selectedTVShow.tagline && (
+                          <p className="text-sm text-[var(--muted)] italic mt-1">&ldquo;{selectedTVShow.tagline}&rdquo;</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-[var(--muted)]">
+                          <span className="flex items-center gap-1">
+                            <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                            {selectedTVShow.vote_average.toFixed(1)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar size={14} />
+                            {selectedTVShow.first_air_date?.split("-")[0]}
+                          </span>
+                          <span className="px-2 py-0.5 bg-[var(--background)] rounded text-xs font-medium">
+                            {selectedTVShow.status}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Genres */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {selectedTVShow.genres?.map((genre) => (
+                        <span
+                          key={genre.id}
+                          className="px-3 py-1 bg-[var(--background)] text-[var(--foreground)] text-xs font-medium rounded-full border border-[var(--card-border)]"
+                        >
+                          {genre.name}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Seasons & Episodes Info */}
+                    <div className="flex gap-4 mb-4 p-3 bg-[var(--background)] rounded-xl border border-[var(--card-border)]">
+                      <div className="text-center flex-1">
+                        <p className="text-2xl font-bold text-[var(--foreground)]">{selectedTVShow.number_of_seasons}</p>
+                        <p className="text-xs text-[var(--muted)]">Seasons</p>
+                      </div>
+                      <div className="w-px bg-[var(--card-border)]" />
+                      <div className="text-center flex-1">
+                        <p className="text-2xl font-bold text-[var(--foreground)]">{selectedTVShow.number_of_episodes}</p>
+                        <p className="text-xs text-[var(--muted)]">Episodes</p>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 mb-6">
+                      <button
+                        onClick={() => toggleWatchlist(selectedTVShow.id)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 font-semibold rounded-xl transition-all ${watchlist.includes(selectedTVShow.id)
+                          ? "bg-[var(--foreground)] text-[var(--background)]"
+                          : "bg-[var(--background)] text-[var(--foreground)] border border-[var(--card-border)]"
+                          }`}
+                      >
+                        <ListPlus size={18} className={watchlist.includes(selectedTVShow.id) ? "fill-current" : ""} />
+                        {watchlist.includes(selectedTVShow.id) ? "In Watchlist" : "Add to Watchlist"}
+                      </button>
+                      <button
+                        onClick={() => markAsWatched(selectedTVShow.id)}
+                        className={`p-3 rounded-xl transition-all group/eye ${watched.includes(selectedTVShow.id)
+                          ? "bg-green-500 text-white"
+                          : "bg-[var(--background)] border border-[var(--card-border)] hover:bg-[var(--card-border)]"
+                          }`}
+                        title="Mark as Watched"
+                      >
+                        {watched.includes(selectedTVShow.id) ? (
+                          <Eye size={18} />
+                        ) : (
+                          <>
+                            <EyeOff size={18} className="group-hover/eye:hidden text-[var(--foreground)]" />
+                            <Eye size={18} className="hidden group-hover/eye:block text-[var(--foreground)]" />
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => toggleFavorite(selectedTVShow.id)}
+                        className={`p-3 rounded-xl transition-all ${favorites.includes(selectedTVShow.id)
+                          ? "bg-red-500 text-white"
+                          : "bg-[var(--background)] border border-[var(--card-border)] hover:bg-[var(--card-border)]"
+                          }`}
+                        title="Add to Favorites"
+                      >
+                        <Heart size={18} className={favorites.includes(selectedTVShow.id) ? "fill-current" : "text-[var(--foreground)]"} />
+                      </button>
+                    </div>
+
+                    {/* Overview */}
+                    <div className="mb-6">
+                      <h3 className="font-semibold text-[var(--foreground)] mb-2">Overview</h3>
+                      <p className="text-sm text-[var(--muted)] leading-relaxed">
+                        {selectedTVShow.overview || "No overview available."}
+                      </p>
+                    </div>
+
+                    {/* Seasons List */}
+                    {selectedTVShow.seasons && selectedTVShow.seasons.length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="font-semibold text-[var(--foreground)] mb-3">Seasons</h3>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {selectedTVShow.seasons.filter(s => s.season_number > 0).map((season) => (
+                            <div
+                              key={season.id}
+                              className="flex items-center gap-3 p-2 bg-[var(--background)] rounded-lg border border-[var(--card-border)]"
+                            >
+                              {season.poster_path ? (
+                                <div className="relative w-10 h-14 rounded overflow-hidden flex-shrink-0">
+                                  <Image
+                                    src={getImageUrl(season.poster_path, "w200") || ""}
+                                    alt={season.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-14 rounded bg-[var(--card-border)] flex items-center justify-center flex-shrink-0">
+                                  <Film size={16} className="text-[var(--muted)]" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[var(--foreground)] truncate">{season.name}</p>
+                                <p className="text-xs text-[var(--muted)]">{season.episode_count} episodes</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Watch Providers / Streaming */}
+                    {movieWatchProviders.length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="font-semibold text-[var(--foreground)] mb-3">Stream on</h3>
+                        <div className="flex flex-wrap gap-3">
+                          {movieWatchProviders.map((provider) => (
+                            <div
+                              key={provider.provider_id}
+                              className="flex items-center gap-2 px-3 py-2 bg-[var(--background)] border border-[var(--card-border)] rounded-lg"
+                            >
+                              {provider.logo_path && (
+                                <Image
+                                  src={`https://image.tmdb.org/t/p/w45${provider.logo_path}`}
+                                  alt={provider.provider_name}
+                                  width={24}
+                                  height={24}
+                                  className="rounded"
+                                />
+                              )}
+                              <span className="text-xs font-medium text-[var(--foreground)]">
+                                {provider.provider_name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-[var(--muted)] mt-2">Data from JustWatch</p>
+                      </div>
+                    )}
+
+                    {/* Cast */}
+                    {movieCast.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-[var(--foreground)] mb-3">Cast</h3>
+                        <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                          {movieCast.map((person) => (
+                            <div key={person.id} className="flex-shrink-0 w-16 text-center">
+                              <div className="relative w-16 h-16 rounded-full overflow-hidden bg-[var(--card-border)] mb-2">
+                                {person.profile_path ? (
+                                  <Image
+                                    src={getImageUrl(person.profile_path, "w200") || ""}
+                                    alt={person.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <User size={24} className="text-[var(--muted)]" />
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-xs font-medium text-[var(--foreground)] truncate">{person.name}</p>
+                              <p className="text-xs text-[var(--muted)] truncate">{person.character}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : selectedMovie ? (
                 <>
                   {/* Backdrop Image */}
@@ -1590,6 +2183,157 @@ export default function HomePage() {
                     Yes, favorite!
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Filter Sheet */}
+      <AnimatePresence>
+        {showMobileFilters && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 lg:hidden"
+            onClick={() => setShowMobileFilters(false)}
+          >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+            {/* Sheet */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-0 left-0 right-0 bg-[var(--card-bg)] border-t border-[var(--card-border)] rounded-t-3xl max-h-[80vh] overflow-y-auto"
+            >
+              {/* Handle */}
+              <div className="sticky top-0 bg-[var(--card-bg)] pt-3 pb-2 px-4 border-b border-[var(--card-border)]/30">
+                <div className="w-12 h-1.5 bg-[var(--muted)]/30 rounded-full mx-auto mb-3" />
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-[var(--foreground)]">Filters</h3>
+                  <button
+                    onClick={() => setShowMobileFilters(false)}
+                    className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] rounded-full hover:bg-[var(--card-border)]/50 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Options */}
+              <div className="p-4 space-y-5">
+                {/* Year Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Year</label>
+                  <select
+                    value={activeYear || ""}
+                    onChange={(e) => setActiveYear(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20"
+                  >
+                    <option value="">All Years</option>
+                    {Array.from({ length: 35 }, (_, i) => 2025 - i).map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Genre Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Genre</label>
+                  <select
+                    value={activeGenre || ""}
+                    onChange={(e) => setActiveGenre(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20"
+                  >
+                    <option value="">All Genres</option>
+                    {GENRES.map((genre) => (
+                      <option key={genre.id} value={genre.id}>{genre.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Language Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Language</label>
+                  <select
+                    value={activeLanguage || ""}
+                    onChange={(e) => setActiveLanguage(e.target.value || null)}
+                    className="w-full p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20"
+                  >
+                    <option value="">All Languages</option>
+                    {LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>{lang.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Streaming Service Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Streaming Service</label>
+                  <select
+                    value={activeProvider || ""}
+                    onChange={(e) => setActiveProvider(e.target.value || null)}
+                    className="w-full p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20"
+                  >
+                    <option value="">All Services</option>
+                    {WATCH_PROVIDERS.map((provider) => (
+                      <option key={provider.id} value={provider.id}>{provider.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* View Mode Toggle */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">View Mode</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setViewMode("grid")}
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border transition-colors ${viewMode === "grid"
+                        ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
+                        : "bg-[var(--background)] text-[var(--muted)] border-[var(--card-border)] hover:border-[var(--foreground)]/30"
+                        }`}
+                    >
+                      <LayoutGrid size={18} />
+                      Grid
+                    </button>
+                    <button
+                      onClick={() => setViewMode("list")}
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border transition-colors ${viewMode === "list"
+                        ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
+                        : "bg-[var(--background)] text-[var(--muted)] border-[var(--card-border)] hover:border-[var(--foreground)]/30"
+                        }`}
+                    >
+                      <List size={18} />
+                      List
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="sticky bottom-0 p-4 bg-[var(--card-bg)] border-t border-[var(--card-border)]/30 flex gap-3">
+                <button
+                  onClick={() => {
+                    setActiveGenre(null);
+                    setActiveYear(null);
+                    setActiveLanguage(null);
+                    setActiveProvider(null);
+                  }}
+                  className="flex-1 py-3 px-4 text-sm font-medium text-[var(--foreground)] bg-[var(--background)] border border-[var(--card-border)] rounded-xl hover:bg-[var(--card-border)] transition-colors"
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={() => setShowMobileFilters(false)}
+                  className="flex-1 py-3 px-4 text-sm font-medium text-[var(--background)] bg-[var(--foreground)] rounded-xl hover:opacity-90 transition-opacity"
+                >
+                  Apply Filters
+                </button>
               </div>
             </motion.div>
           </motion.div>
