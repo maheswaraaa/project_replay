@@ -971,7 +971,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-[var(--background)] pb-safe">
       {/* Header - Hidden on Profile */}
       {activeNav !== "profile" && (
-        <header className="sticky top-0 z-40 bg-[var(--background)]/95 backdrop-blur-md border-b border-[var(--card-border)]/10">
+        <header className="sticky top-0 z-40 bg-[var(--background)]/95 backdrop-blur-md border-b border-[var(--card-border)]/10 header-safe">
           <div className="max-w-7xl mx-auto px-4">
             {/* Single Row Header */}
             <div className="flex items-center h-14 gap-4">
@@ -1210,65 +1210,81 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Mobile Tabs Row */}
+            {/* Mobile Tabs Row - Compact Two-Row Layout */}
             {activeNav === "home" && (
-              <div className="flex md:hidden items-center gap-2 py-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
-                {tabs.map((tab) => (
+              <div className="flex md:hidden flex-col gap-2 py-2">
+                {/* Row 1: Category Dropdown + Media Type + Filters */}
+                <div className="flex items-center gap-2">
+                  {/* Category Dropdown */}
+                  <div className="relative flex-1">
+                    <select
+                      value={activeTab}
+                      onChange={(e) => {
+                        setActiveTab(e.target.value as Tab);
+                        setActiveGenre(null);
+                        setActiveYear(null);
+                        setActiveLanguage(null);
+                        setActiveSortBy("popularity.desc");
+                        setActiveProvider(null);
+                      }}
+                      className="w-full appearance-none px-3 py-2 pr-8 bg-[var(--foreground)] text-[var(--background)] text-sm font-semibold rounded-xl cursor-pointer focus:outline-none"
+                    >
+                      {tabs.map((tab) => (
+                        <option key={tab.key} value={tab.key}>{tab.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--background)]" />
+                  </div>
+
+                  {/* Media Type Toggle */}
+                  <div className="flex rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5 shrink-0">
+                    <button
+                      onClick={() => setActiveMediaType("movie")}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "movie"
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "text-[var(--muted)]"
+                        }`}
+                    >
+                      <Clapperboard size={12} />
+                      <span className="hidden xs:inline">Movies</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveMediaType("tv")}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "tv"
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "text-[var(--muted)]"
+                        }`}
+                    >
+                      <MonitorPlay size={12} />
+                      <span className="hidden xs:inline">TV</span>
+                    </button>
+                  </div>
+
+                  {/* Filter Button */}
                   <button
-                    key={tab.key}
-                    onClick={() => {
-                      setActiveTab(tab.key);
-                      setActiveGenre(null);
-                      setActiveYear(null);
-                      setActiveLanguage(null);
-                      setActiveSortBy("popularity.desc");
-                      setActiveProvider(null);
-                    }}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-200 ${activeTab === tab.key && !activeGenre && !activeYear && !activeLanguage
+                    onClick={() => setShowMobileFilters(true)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl shrink-0 transition-all duration-200 ${(activeGenre || activeYear || activeLanguage || activeProvider)
                       ? "bg-[var(--foreground)] text-[var(--background)]"
-                      : "bg-[var(--card-bg)]/60 text-[var(--muted)]"
+                      : "bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--muted)]"
                       }`}
                   >
-                    {tab.label}
+                    <Filter size={14} />
+                    {(activeGenre || activeYear || activeLanguage || activeProvider) && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20 font-bold">
+                        {[activeGenre, activeYear, activeLanguage, activeProvider].filter(Boolean).length}
+                      </span>
+                    )}
                   </button>
-                ))}
-                {/* Mobile Media Type Toggle */}
-                <div className="flex rounded-full bg-[var(--card-bg)]/60 p-0.5 shrink-0">
+
+                  {/* View Toggle */}
                   <button
-                    onClick={() => setActiveMediaType("movie")}
-                    className={`p-1.5 rounded-full transition-all duration-200 ${activeMediaType === "movie"
-                      ? "bg-[var(--foreground)] text-[var(--background)]"
-                      : "text-[var(--muted)]"
-                      }`}
+                    onClick={() => setViewMode(prev => prev === "grid" ? "list" : "grid")}
+                    className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl transition-colors shrink-0"
+                    title={viewMode === "grid" ? "Switch to List View" : "Switch to Grid View"}
                   >
-                    <Clapperboard size={14} />
-                  </button>
-                  <button
-                    onClick={() => setActiveMediaType("tv")}
-                    className={`p-1.5 rounded-full transition-all duration-200 ${activeMediaType === "tv"
-                      ? "bg-[var(--foreground)] text-[var(--background)]"
-                      : "text-[var(--muted)]"
-                      }`}
-                  >
-                    <MonitorPlay size={14} />
+                    {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
                   </button>
                 </div>
-                {/* Mobile Filter Button */}
-                <button
-                  onClick={() => setShowMobileFilters(true)}
-                  className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all duration-200 ${(activeGenre || activeYear || activeLanguage || activeProvider)
-                    ? "bg-[var(--foreground)] text-[var(--background)]"
-                    : "bg-[var(--card-bg)]/60 text-[var(--muted)]"
-                    }`}
-                >
-                  <Filter size={12} />
-                  Filters
-                  {(activeGenre || activeYear || activeLanguage || activeProvider) && (
-                    <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20">
-                      {[activeGenre, activeYear, activeLanguage, activeProvider].filter(Boolean).length}
-                    </span>
-                  )}
-                </button>
               </div>
             )}
           </div>
@@ -1931,8 +1947,8 @@ export default function HomePage() {
                                   </div>
                                 )}
                               </div>
-                              <p className="text-xs font-medium text-[var(--foreground)] truncate">{person.name}</p>
-                              <p className="text-xs text-[var(--muted)] truncate">{person.character}</p>
+                              <p className="text-xs font-medium text-[var(--foreground)] truncate" title={person.name}>{person.name}</p>
+                              <p className="text-xs text-[var(--muted)] truncate" title={person.character}>{person.character}</p>
                             </div>
                           ))}
                         </div>
@@ -2125,8 +2141,8 @@ export default function HomePage() {
                                   </div>
                                 )}
                               </div>
-                              <p className="text-xs font-medium text-[var(--foreground)] truncate">{person.name}</p>
-                              <p className="text-xs text-[var(--muted)] truncate">{person.character}</p>
+                              <p className="text-xs font-medium text-[var(--foreground)] truncate" title={person.name}>{person.name}</p>
+                              <p className="text-xs text-[var(--muted)] truncate" title={person.character}>{person.character}</p>
                             </div>
                           ))}
                         </div>

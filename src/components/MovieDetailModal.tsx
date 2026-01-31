@@ -239,8 +239,8 @@ export default function MovieDetailModal({
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="text-xs font-medium text-[var(--foreground)] truncate">{person.name}</p>
-                                                <p className="text-xs text-[var(--muted)] truncate">{person.character}</p>
+                                                <p className="text-xs font-medium text-[var(--foreground)] truncate" title={person.name}>{person.name}</p>
+                                                <p className="text-xs text-[var(--muted)] truncate" title={person.character}>{person.character}</p>
                                             </div>
                                         ))}
                                     </div>
