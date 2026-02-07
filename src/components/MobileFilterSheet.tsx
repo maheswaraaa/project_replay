@@ -164,7 +164,7 @@ export default function MobileFilterSheet({
                                     className={selectClasses}
                                 >
                                     <option value="">All Years</option>
-                                    {Array.from({ length: 35 }, (_, i) => 2025 - i).map((year) => (
+                                    {Array.from({ length: 35 }, (_, i) => new Date().getFullYear() - i).map((year) => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
                                 </select>
