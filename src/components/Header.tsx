@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     Bookmark, Filter, List, LayoutGrid, X, ChevronDown,
 } from "lucide-react";
@@ -35,6 +35,17 @@ interface HeaderProps {
     setShowMobileFilters: (show: boolean) => void;
     resetToDefaults: () => void;
 }
+
+const tabVariants = {
+    inactive: {
+        backgroundColor: "transparent",
+        color: "var(--muted)",
+    },
+    active: {
+        backgroundColor: "var(--foreground)",
+        color: "var(--background)",
+    },
+};
 
 export default function Header({
     activeNav,
@@ -98,59 +109,100 @@ export default function Header({
     const providerOptions = WATCH_PROVIDERS.map((p) => ({ value: String(p.id), label: p.name }));
 
     return (
-        <header className="sticky top-0 z-40 bg-[var(--background)]/95 backdrop-blur-md border-b border-[var(--card-border)]/10 header-safe">
+        <motion.header
+            className="sticky top-0 z-40 bg-[var(--background)]/95 backdrop-blur-md border-b border-[var(--card-border)]/10 header-safe"
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{
+                type: "spring",
+                damping: 25,
+                stiffness: 300,
+            }}
+        >
             <div className="max-w-7xl mx-auto px-4">
                 <div className="flex items-center h-14 gap-4">
                     {/* Logo */}
-                    <button
+                    <motion.button
                         onClick={handleLogoClick}
                         className="flex items-center gap-1.5 hover:opacity-70 transition-opacity flex-shrink-0"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                     >
                         <Image src="/logo.png" alt="Replay" width={24} height={24} className="invert" priority />
                         <span className="text-sm font-bold text-[var(--foreground)]">Replay</span>
                         <span className="text-[10px] text-[var(--muted)]">— Discover. Watch. Remember.</span>
-                    </button>
+                    </motion.button>
 
                     <div className="hidden md:block w-px h-5 bg-[var(--card-border)]/30" />
 
                     {/* Desktop tabs */}
                     {activeNav === "home" && (
                         <nav className="hidden md:flex items-center gap-1 flex-shrink-0">
-                            {TABS.map((tab) => (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => handleTabChange(tab.key)}
-                                    className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${activeTab === tab.key && !hasFilters
-                                        ? "bg-[var(--foreground)] text-[var(--background)]"
-                                        : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)]"
-                                        }`}
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
+                            {TABS.map((tab) => {
+                                const isActive = activeTab === tab.key && !hasFilters;
+                                return (
+                                    <motion.button
+                                        key={tab.key}
+                                        onClick={() => handleTabChange(tab.key)}
+                                        className="relative px-3 py-1.5 text-xs font-medium rounded-full"
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        {isActive && (
+                                            <motion.div
+                                                layoutId="activeHeaderTab"
+                                                className="absolute inset-0 bg-[var(--foreground)] rounded-full"
+                                                transition={{
+                                                    type: "spring",
+                                                    damping: 30,
+                                                    stiffness: 350,
+                                                }}
+                                            />
+                                        )}
+                                        <motion.span
+                                            className="relative z-10"
+                                            animate={{
+                                                color: isActive ? "var(--background)" : "var(--muted)"
+                                            }}
+                                            transition={{ duration: 0.2 }}
+                                        >
+                                            {tab.label}
+                                        </motion.span>
+                                    </motion.button>
+                                );
+                            })}
                         </nav>
                     )}
 
                     {/* Desktop search bars */}
-                    {(activeNav === "library" || activeNav === "search") && (
-                        <motion.div
-                            className={`hidden lg:block flex-1 ${activeNav === "search" ? "max-w-xl" : "max-w-md"}`}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            <SearchBar
-                                value={searchQuery}
-                                onChange={setSearchQuery}
-                                placeholder={activeNav === "search" ? "Search movies & TV shows..." : "Filter library..."}
-                            />
-                        </motion.div>
-                    )}
+                    <AnimatePresence mode="wait">
+                        {(activeNav === "library" || activeNav === "search") && (
+                            <motion.div
+                                key="search-bar"
+                                className={`hidden lg:block flex-1 ${activeNav === "search" ? "max-w-xl" : "max-w-md"}`}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                <SearchBar
+                                    value={searchQuery}
+                                    onChange={setSearchQuery}
+                                    placeholder={activeNav === "search" ? "Search movies & TV shows..." : "Filter library..."}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {activeNav !== "library" && activeNav !== "search" && <div className="flex-1" />}
 
                     {/* Desktop filters */}
-                    <div className="hidden lg:flex items-center gap-1.5">
+                    <motion.div
+                        className="hidden lg:flex items-center gap-1.5"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.1 }}
+                    >
                         <MediaTypeToggle
                             value={activeMediaType}
                             onChange={(type) => {
@@ -191,87 +243,137 @@ export default function Header({
                             isActive={!!activeProvider}
                         />
 
-                        {hasFilters && (
-                            <button
-                                onClick={clearFilters}
-                                className="p-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)] rounded-full transition-colors"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
+                        <AnimatePresence>
+                            {hasFilters && (
+                                <motion.button
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={clearFilters}
+                                    className="p-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)] rounded-full transition-colors"
+                                >
+                                    <X size={14} />
+                                </motion.button>
+                            )}
+                        </AnimatePresence>
 
-                        <button
+                        <motion.button
                             onClick={() => setViewMode((prev) => (prev === "grid" ? "list" : "grid"))}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                             className="p-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)] rounded-full transition-colors"
                             title={viewMode === "grid" ? "Switch to List View" : "Switch to Grid View"}
                         >
-                            {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
-                        </button>
-                    </div>
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={viewMode}
+                                    initial={{ rotate: -90, opacity: 0 }}
+                                    animate={{ rotate: 0, opacity: 1 }}
+                                    exit={{ rotate: 90, opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
+                                >
+                                    {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
+                                </motion.div>
+                            </AnimatePresence>
+                        </motion.button>
+                    </motion.div>
 
                     {/* Desktop library button */}
-                    <button
+                    <motion.button
                         onClick={() => setActiveNav("library")}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
                         className={`hidden lg:flex p-2 rounded-full transition-all duration-200 flex-shrink-0 ${activeNav === "library"
                             ? "bg-[var(--foreground)] text-[var(--background)]"
                             : "text-[var(--muted)] hover:bg-[var(--card-bg)] hover:text-[var(--foreground)]"
                             }`}
                     >
                         <Bookmark size={16} className={activeNav === "library" ? "fill-current" : ""} />
-                    </button>
+                    </motion.button>
                 </div>
 
                 {/* Mobile controls for Home */}
-                {activeNav === "home" && (
-                    <div className="flex md:hidden flex-col gap-2 py-2">
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                                <select
-                                    value={activeTab}
-                                    onChange={(e) => handleTabChange(e.target.value as Tab)}
-                                    className="w-full appearance-none px-3 py-2 pr-8 bg-[var(--foreground)] text-[var(--background)] text-sm font-semibold rounded-xl cursor-pointer focus:outline-none"
+                <AnimatePresence>
+                    {activeNav === "home" && (
+                        <motion.div
+                            className="flex md:hidden flex-col gap-2 py-2"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <select
+                                        value={activeTab}
+                                        onChange={(e) => handleTabChange(e.target.value as Tab)}
+                                        className="w-full appearance-none px-3 py-2 pr-8 bg-[var(--foreground)] text-[var(--background)] text-sm font-semibold rounded-xl cursor-pointer focus:outline-none"
+                                    >
+                                        {TABS.map((tab) => (
+                                            <option key={tab.key} value={tab.key}>{tab.label}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--background)]" />
+                                </div>
+
+                                <MediaTypeToggle
+                                    value={activeMediaType}
+                                    onChange={(type) => {
+                                        setActiveMediaType(type);
+                                        setActiveGenre(null);
+                                    }}
+                                    size="md"
+                                />
+
+                                <motion.button
+                                    onClick={() => setShowMobileFilters(true)}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl shrink-0 transition-all duration-200 ${hasFilters
+                                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                                        : "bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--muted)]"
+                                        }`}
                                 >
-                                    {TABS.map((tab) => (
-                                        <option key={tab.key} value={tab.key}>{tab.label}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--background)]" />
+                                    <Filter size={14} />
+                                    <AnimatePresence>
+                                        {hasFilters && (
+                                            <motion.span
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                exit={{ scale: 0 }}
+                                                className="px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20 font-bold"
+                                            >
+                                                {filterCount}
+                                            </motion.span>
+                                        )}
+                                    </AnimatePresence>
+                                </motion.button>
+
+                                <motion.button
+                                    onClick={() => setViewMode((prev) => (prev === "grid" ? "list" : "grid"))}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl transition-colors shrink-0"
+                                >
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key={viewMode}
+                                            initial={{ rotate: -90, opacity: 0 }}
+                                            animate={{ rotate: 0, opacity: 1 }}
+                                            exit={{ rotate: 90, opacity: 0 }}
+                                            transition={{ duration: 0.15 }}
+                                        >
+                                            {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
+                                        </motion.div>
+                                    </AnimatePresence>
+                                </motion.button>
                             </div>
-
-                            <MediaTypeToggle
-                                value={activeMediaType}
-                                onChange={(type) => {
-                                    setActiveMediaType(type);
-                                    setActiveGenre(null);
-                                }}
-                                size="md"
-                            />
-
-                            <button
-                                onClick={() => setShowMobileFilters(true)}
-                                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl shrink-0 transition-all duration-200 ${hasFilters
-                                    ? "bg-[var(--foreground)] text-[var(--background)]"
-                                    : "bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--muted)]"
-                                    }`}
-                            >
-                                <Filter size={14} />
-                                {hasFilters && (
-                                    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20 font-bold">
-                                        {filterCount}
-                                    </span>
-                                )}
-                            </button>
-
-                            <button
-                                onClick={() => setViewMode((prev) => (prev === "grid" ? "list" : "grid"))}
-                                className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl transition-colors shrink-0"
-                            >
-                                {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
-                            </button>
-                        </div>
-                    </div>
-                )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-        </header>
+        </motion.header>
     );
 }

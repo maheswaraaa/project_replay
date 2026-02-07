@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
     ListPlus, Eye, Heart, Loader2, Sparkles,
 } from "lucide-react";
@@ -9,7 +9,6 @@ import MediaTypeToggle from "./MediaTypeToggle";
 import MediaGrid from "./MediaGrid";
 import EmptyState from "./EmptyState";
 import type { LibraryTab, MediaTypeFilter, ViewMode } from "@/types";
-import { EASE_OUT } from "@/types";
 
 const LIBRARY_TABS: { key: LibraryTab; label: string; icon: typeof ListPlus }[] = [
     { key: "watchlist", label: "Watchlist", icon: ListPlus },
@@ -88,6 +87,37 @@ function applyLibraryFilters(
     return filtered;
 }
 
+const pageVariants: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+            duration: 0.3,
+            ease: [0.25, 0.46, 0.45, 0.94] as const,
+        },
+    },
+};
+
+const tabContentVariants: Variants = {
+    hidden: { opacity: 0, x: 20 },
+    visible: {
+        opacity: 1,
+        x: 0,
+        transition: {
+            duration: 0.3,
+            ease: [0.25, 0.46, 0.45, 0.94] as const,
+        },
+    },
+    exit: {
+        opacity: 0,
+        x: -20,
+        transition: {
+            duration: 0.2,
+        },
+    },
+};
+
 export default function LibraryView({
     activeTab,
     setActiveTab,
@@ -149,29 +179,48 @@ export default function LibraryView({
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: EASE_OUT }}
+            variants={pageVariants}
+            initial="hidden"
+            animate="visible"
         >
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
+            <motion.div
+                className="flex items-center justify-between mb-4"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
                 <h2 className="text-xl font-bold text-[var(--foreground)]">Your Library</h2>
                 <MediaTypeToggle
                     value={activeMediaType}
                     onChange={setActiveMediaType}
                     size="sm"
                 />
-            </div>
+            </motion.div>
 
             {libraryLoading && (
-                <div className="flex items-center gap-2 mb-4 text-[var(--muted)]">
-                    <Loader2 size={16} className="animate-spin" />
+                <motion.div
+                    className="flex items-center gap-2 mb-4 text-[var(--muted)]"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                >
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    >
+                        <Loader2 size={16} />
+                    </motion.div>
                     <span className="text-sm">Loading library items...</span>
-                </div>
+                </motion.div>
             )}
 
             {/* Tabs */}
-            <div className="mb-6">
+            <motion.div
+                className="mb-6"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+            >
                 {/* Mobile tabs */}
                 <div className="sm:hidden border-b border-[var(--card-border)]">
                     <div className="flex">
@@ -180,7 +229,11 @@ export default function LibraryView({
                             const isActive = activeTab === tab.key;
                             const Icon = tab.icon;
                             return (
-                                <button key={tab.key} onClick={() => setActiveTab(tab.key)} className="flex-1 relative">
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className="flex-1 relative"
+                                >
                                     <div
                                         className={`flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors duration-200 ${isActive ? "text-[var(--foreground)]" : "text-[var(--muted)]"
                                             }`}
@@ -188,19 +241,21 @@ export default function LibraryView({
                                         <Icon size={14} />
                                         <span>{tab.label}</span>
                                         {count > 0 && (
-                                            <span
+                                            <motion.span
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
                                                 className={`min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold rounded-full leading-none ${isActive
                                                     ? "bg-[var(--foreground)] text-[var(--background)]"
                                                     : "bg-[var(--card-border)] text-[var(--muted)]"
                                                     }`}
                                             >
                                                 {count}
-                                            </span>
+                                            </motion.span>
                                         )}
                                     </div>
                                     {isActive && (
                                         <motion.div
-                                            layoutId="activeLibraryTab"
+                                            layoutId="activeLibraryTabMobile"
                                             className="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--foreground)] rounded-full"
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
@@ -218,73 +273,108 @@ export default function LibraryView({
                         const tabMovies = getTabMovies(tab.key);
                         const filteredCount = applyLibraryFilters(tabMovies, filterParams).length;
                         const savedCount = getTabIds(tab.key).length;
+                        const isActive = activeTab === tab.key;
+
                         return (
-                            <button
+                            <motion.button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab.key
-                                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                className={`relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors duration-200 ${isActive
+                                    ? "text-[var(--background)]"
                                     : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
                                     }`}
                             >
-                                <Icon size={16} />
-                                {tab.label}
-                                {filteredCount > 0 && (
-                                    <span
-                                        className={`px-1.5 py-0.5 text-xs rounded-full ${activeTab === tab.key
-                                            ? "bg-[var(--background)] text-[var(--foreground)]"
-                                            : "bg-[var(--card-border)] text-[var(--foreground)]"
-                                            }`}
-                                    >
-                                        {filteredCount}
-                                        {tabMovies.length > filteredCount
-                                            ? `/${tabMovies.length}`
-                                            : savedCount > tabMovies.length
-                                                ? `/${savedCount}`
-                                                : ""}
-                                    </span>
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="activeLibraryTabDesktop"
+                                        className="absolute inset-0 bg-[var(--foreground)] rounded-full"
+                                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                    />
                                 )}
-                            </button>
+                                <span className="relative z-10 flex items-center gap-2">
+                                    <Icon size={16} />
+                                    {tab.label}
+                                    {filteredCount > 0 && (
+                                        <span
+                                            className={`px-1.5 py-0.5 text-xs rounded-full ${isActive
+                                                ? "bg-[var(--background)] text-[var(--foreground)]"
+                                                : "bg-[var(--card-border)] text-[var(--foreground)]"
+                                                }`}
+                                        >
+                                            {filteredCount}
+                                            {tabMovies.length > filteredCount
+                                                ? `/${tabMovies.length}`
+                                                : savedCount > tabMovies.length
+                                                    ? `/${savedCount}`
+                                                    : ""}
+                                        </span>
+                                    )}
+                                </span>
+                            </motion.button>
                         );
                     })}
                 </div>
-            </div>
+            </motion.div>
 
             {/* Watchlist nudge */}
-            {activeTab === "watchlist" && watchlist.length > 0 && watched.length === 0 && (
-                <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-4 p-3 bg-gradient-to-r from-green-500/10 to-transparent border border-green-500/20 rounded-xl flex items-center gap-3"
-                >
-                    <Eye size={20} className="text-green-500 flex-shrink-0" />
-                    <p className="text-sm text-[var(--foreground)]">
-                        Have you watched any of these?{" "}
-                        <span className="text-[var(--muted)]">Mark them as watched!</span>
-                    </p>
-                </motion.div>
-            )}
+            <AnimatePresence>
+                {activeTab === "watchlist" && watchlist.length > 0 && watched.length === 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10, height: 0 }}
+                        animate={{ opacity: 1, y: 0, height: "auto" }}
+                        exit={{ opacity: 0, y: -10, height: 0 }}
+                        className="mb-4 p-3 bg-gradient-to-r from-green-500/10 to-transparent border border-green-500/20 rounded-xl flex items-center gap-3 overflow-hidden"
+                    >
+                        <motion.div
+                            animate={{ rotate: [0, 10, -10, 0] }}
+                            transition={{ repeat: Infinity, duration: 2, repeatDelay: 1 }}
+                        >
+                            <Eye size={20} className="text-green-500 flex-shrink-0" />
+                        </motion.div>
+                        <p className="text-sm text-[var(--foreground)]">
+                            Have you watched any of these?{" "}
+                            <span className="text-[var(--muted)]">Mark them as watched!</span>
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            {/* Content */}
-            {currentIds.length === 0 ? (
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-                    <EmptyState {...emptyConfig[activeTab]} />
+            {/* Content with tab switching animation */}
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activeTab}
+                    variants={tabContentVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                >
+                    {currentIds.length === 0 ? (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            <EmptyState {...emptyConfig[activeTab]} />
+                        </motion.div>
+                    ) : (
+                        <MediaGrid
+                            movies={currentMovies}
+                            loading={false}
+                            viewMode={viewMode}
+                            showEmpty={false}
+                            watchlist={watchlist}
+                            watched={watched}
+                            favorites={favorites}
+                            onOpenDetail={onOpenDetail}
+                            onToggleWatchlist={onToggleWatchlist}
+                            onMarkWatched={onMarkWatched}
+                            onToggleFavorite={onToggleFavorite}
+                        />
+                    )}
                 </motion.div>
-            ) : (
-                <MediaGrid
-                    movies={currentMovies}
-                    loading={false}
-                    viewMode={viewMode}
-                    showEmpty={false}
-                    watchlist={watchlist}
-                    watched={watched}
-                    favorites={favorites}
-                    onOpenDetail={onOpenDetail}
-                    onToggleWatchlist={onToggleWatchlist}
-                    onMarkWatched={onMarkWatched}
-                    onToggleFavorite={onToggleFavorite}
-                />
-            )}
+            </AnimatePresence>
         </motion.div>
     );
 }
