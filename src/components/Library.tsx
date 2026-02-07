@@ -8,7 +8,7 @@ import MovieListItem from "./MovieListItem"; // Actually MovieGrid handles this
 interface LibraryProps {
     activeLibraryTab: LibraryTab;
     setActiveLibraryTab: (tab: LibraryTab) => void;
-    movies: Movie[]; // The pool of movies to filter from
+    movies: Movie[];
     watchlist: number[];
     watched: number[];
     favorites: number[];
@@ -48,11 +48,9 @@ export default function Library({
         { key: "favorites", label: "Favorites", icon: Heart },
     ];
 
-    // Helper function to apply filters
     const applyFilters = (movieList: Movie[]) => {
         let filtered = movieList;
 
-        // Search query filter (for Library filtering)
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(m =>
@@ -87,21 +85,17 @@ export default function Library({
         >
             <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">Your Library</h2>
 
-            {/* Library Tabs */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            {/* Library Tabs - responsive: fill width on mobile, auto on desktop */}
+            <div className="grid grid-cols-3 sm:flex sm:gap-2 gap-1.5 mb-6">
                 {libraryTabs.map((tab) => {
                     const Icon = tab.icon;
-                    // Get movies for this tab
                     const tabMovies = tab.key === "watchlist"
                         ? movies.filter(m => watchlist.includes(m.id))
                         : tab.key === "watched"
                             ? movies.filter(m => watched.includes(m.id))
                             : movies.filter(m => favorites.includes(m.id));
-                    // Filtered count (what's displayed)
                     const filteredCount = applyFilters(tabMovies).length;
-                    // Total loaded count
                     const loadedCount = tabMovies.length;
-                    // Total saved count
                     const savedCount = tab.key === "watchlist" ? watchlist.length
                         : tab.key === "watched" ? watched.length
                             : favorites.length;
@@ -109,15 +103,15 @@ export default function Library({
                         <button
                             key={tab.key}
                             onClick={() => setActiveLibraryTab(tab.key)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeLibraryTab === tab.key
+                            className={`flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 min-w-0 ${activeLibraryTab === tab.key
                                 ? "bg-[var(--foreground)] text-[var(--background)]"
                                 : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
                                 }`}
                         >
-                            <Icon size={16} />
-                            {tab.label}
+                            <Icon size={14} className="flex-shrink-0 sm:w-4 sm:h-4" />
+                            <span className="truncate">{tab.label}</span>
                             {filteredCount > 0 && (
-                                <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeLibraryTab === tab.key
+                                <span className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full flex-shrink-0 ${activeLibraryTab === tab.key
                                     ? "bg-[var(--background)] text-[var(--foreground)]"
                                     : "bg-[var(--card-border)] text-[var(--foreground)]"
                                     }`}>
@@ -167,7 +161,7 @@ export default function Library({
                         <>
                             <MovieGrid
                                 movies={applyFilters(movies.filter(m => watchlist.includes(m.id)))}
-                                loading={false} // Never loading here in this MVP
+                                loading={false}
                                 viewMode={viewMode}
                                 watchlist={watchlist}
                                 watched={watched}
@@ -176,8 +170,7 @@ export default function Library({
                                 markAsWatched={markAsWatched}
                                 toggleFavorite={toggleFavorite}
                                 openMovieDetail={openMovieDetail}
-                                showEmpty={false} // Handled above, or we can rely on MovieGrid's empty logic?
-                            // The original logic had custom empty logic "Loading your watchlist..." if filtered list is empty but watchlist is NOT.
+                                showEmpty={false}
                             />
                             {movies.filter(m => watchlist.includes(m.id)).length === 0 && watchlist.length > 0 && (
                                 <div className="col-span-full text-center py-10 text-[var(--muted)]">
