@@ -3,7 +3,7 @@ import { Bookmark, ListPlus, Eye, Heart, Sparkles } from "lucide-react";
 import { LibraryTab, NavItem } from "@/types";
 import { Movie } from "@/lib/tmdb";
 import MovieGrid from "./MovieGrid";
-import MovieListItem from "./MovieListItem"; // Actually MovieGrid handles this
+import MovieListItem from "./MovieListItem";
 
 interface LibraryProps {
     activeLibraryTab: LibraryTab;
@@ -42,10 +42,10 @@ export default function Library({
     markAsWatched,
     toggleFavorite,
 }: LibraryProps) {
-    const libraryTabs: { key: LibraryTab; label: string; icon: typeof Bookmark }[] = [
-        { key: "watchlist", label: "Watchlist", icon: ListPlus },
-        { key: "watched", label: "Watched", icon: Eye },
-        { key: "favorites", label: "Favorites", icon: Heart },
+    const libraryTabs: { key: LibraryTab; label: string; shortLabel: string; icon: typeof Bookmark }[] = [
+        { key: "watchlist", label: "Watchlist", shortLabel: "List", icon: ListPlus },
+        { key: "watched", label: "Watched", shortLabel: "Seen", icon: Eye },
+        { key: "favorites", label: "Favorites", shortLabel: "Favs", icon: Heart },
     ];
 
     const applyFilters = (movieList: Movie[]) => {
@@ -85,8 +85,8 @@ export default function Library({
         >
             <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">Your Library</h2>
 
-            {/* Library Tabs - responsive: fill width on mobile, auto on desktop */}
-            <div className="grid grid-cols-3 sm:flex sm:gap-2 gap-1.5 mb-6">
+            {/* Library Tabs */}
+            <div className="flex w-full gap-1.5 sm:gap-2 mb-6">
                 {libraryTabs.map((tab) => {
                     const Icon = tab.icon;
                     const tabMovies = tab.key === "watchlist"
@@ -103,15 +103,16 @@ export default function Library({
                         <button
                             key={tab.key}
                             onClick={() => setActiveLibraryTab(tab.key)}
-                            className={`flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 min-w-0 ${activeLibraryTab === tab.key
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${activeLibraryTab === tab.key
                                 ? "bg-[var(--foreground)] text-[var(--background)]"
                                 : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
                                 }`}
                         >
-                            <Icon size={14} className="flex-shrink-0 sm:w-4 sm:h-4" />
-                            <span className="truncate">{tab.label}</span>
+                            <Icon size={14} className="flex-shrink-0" />
+                            <span className="hidden sm:inline">{tab.label}</span>
+                            <span className="sm:hidden">{tab.shortLabel}</span>
                             {filteredCount > 0 && (
-                                <span className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full flex-shrink-0 ${activeLibraryTab === tab.key
+                                <span className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full flex-shrink-0 leading-none ${activeLibraryTab === tab.key
                                     ? "bg-[var(--background)] text-[var(--foreground)]"
                                     : "bg-[var(--card-border)] text-[var(--foreground)]"
                                     }`}>
