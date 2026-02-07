@@ -35,10 +35,8 @@ export default function MovieListItem({
 
     const handleDragEnd = () => {
         if (dragX > swipeThreshold) {
-            // Swiped RIGHT - Add to Watchlist
             onAddWatchlist();
         } else if (dragX < -swipeThreshold) {
-            // Swiped LEFT - Mark as Watched
             onMarkWatched();
         }
         setDragX(0);
@@ -47,10 +45,8 @@ export default function MovieListItem({
 
     return (
         <div className="relative overflow-hidden rounded-xl">
-            {/* Swipe action backgrounds - only visible when dragging */}
             {isDragging && (
                 <>
-                    {/* Right Swipe Background - Watchlist (Yellow) */}
                     {dragX > 0 && (
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -59,13 +55,12 @@ export default function MovieListItem({
                         >
                             <div className="flex items-center gap-2 text-white">
                                 <BookmarkPlus size={20} />
-                                <span className="text-sm font-medium">
+                                <span className="hidden sm:inline text-sm font-medium">
                                     {isInWatchlist ? "Remove" : "Watchlist"}
                                 </span>
                             </div>
                         </motion.div>
                     )}
-                    {/* Left Swipe Background - Watched (Green) */}
                     {dragX < 0 && (
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -73,7 +68,7 @@ export default function MovieListItem({
                             className="absolute inset-0 flex items-center justify-end pr-4 bg-green-500"
                         >
                             <div className="flex items-center gap-2 text-white">
-                                <span className="text-sm font-medium">
+                                <span className="hidden sm:inline text-sm font-medium">
                                     {isWatched ? "Unwatch" : "Watched"}
                                 </span>
                                 <Eye size={20} />
@@ -83,7 +78,6 @@ export default function MovieListItem({
                 </>
             )}
 
-            {/* Main content - draggable with spring snap */}
             <motion.div
                 drag="x"
                 dragConstraints={{ left: 0, right: 0 }}
@@ -97,7 +91,6 @@ export default function MovieListItem({
                 className="relative flex gap-3 p-3 bg-[var(--card-bg)] rounded-xl cursor-pointer"
                 style={{ touchAction: "pan-y" }}
             >
-                {/* Poster */}
                 <div className="relative w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--card-border)]">
                     {movie.poster_path ? (
                         <Image
@@ -113,11 +106,9 @@ export default function MovieListItem({
                     )}
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0 py-0.5">
                     <h3 className="text-sm font-semibold text-[var(--foreground)] line-clamp-1">{movie.title}</h3>
 
-                    {/* Meta info row */}
                     <div className="flex items-center gap-2 text-xs text-[var(--muted)] mt-1">
                         <span>{movie.release_date?.split("-")[0] || "TBA"}</span>
                         <span>•</span>
@@ -127,12 +118,10 @@ export default function MovieListItem({
                         </div>
                     </div>
 
-                    {/* Overview - 2 lines */}
                     <p className="text-xs text-[var(--muted)] mt-1.5 line-clamp-2 leading-relaxed">
                         {movie.overview || "No description available."}
                     </p>
 
-                    {/* Status Badges */}
                     {(isInWatchlist || isWatched || isFavorite) && (
                         <div className="flex items-center gap-1 mt-2">
                             {isInWatchlist && (
@@ -148,7 +137,6 @@ export default function MovieListItem({
                     )}
                 </div>
 
-                {/* Action Buttons - Visible on desktop, swipe on mobile */}
                 <div className="hidden sm:flex flex-col items-center justify-center gap-1 flex-shrink-0">
                     <button
                         onClick={(e) => { e.stopPropagation(); onAddWatchlist(); }}
@@ -182,7 +170,6 @@ export default function MovieListItem({
                     </button>
                 </div>
 
-                {/* Favorite button always visible (mobile too) */}
                 <button
                     onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
                     className={`sm:hidden p-2 rounded-lg self-center flex-shrink-0 ${isFavorite
