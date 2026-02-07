@@ -73,7 +73,7 @@ type Tab = "trending" | "popular" | "top_rated" | "now_playing";
 type NavItem = "home" | "search" | "library" | "profile";
 type LibraryTab = "watchlist" | "watched" | "favorites";
 
-const easeOut = [0.25, 0.46, 0.45, 0.94];
+const easeOut = [0.25, 0.46, 0.45, 0.94] as const;
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>("trending");
@@ -1292,15 +1292,15 @@ export default function HomePage() {
                         className="flex-1 relative"
                       >
                         <div className={`flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors duration-200 ${isActive
-                            ? "text-[var(--foreground)]"
-                            : "text-[var(--muted)]"
+                          ? "text-[var(--foreground)]"
+                          : "text-[var(--muted)]"
                           }`}>
                           <Icon size={14} />
                           <span>{tab.label}</span>
                           {filteredCount > 0 && (
                             <span className={`min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold rounded-full leading-none ${isActive
-                                ? "bg-[var(--foreground)] text-[var(--background)]"
-                                : "bg-[var(--card-border)] text-[var(--muted)]"
+                              ? "bg-[var(--foreground)] text-[var(--background)]"
+                              : "bg-[var(--card-border)] text-[var(--muted)]"
                               }`}>
                               {filteredCount}
                             </span>
