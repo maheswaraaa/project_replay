@@ -42,10 +42,10 @@ export default function Library({
     markAsWatched,
     toggleFavorite,
 }: LibraryProps) {
-    const libraryTabs: { key: LibraryTab; label: string; shortLabel: string; icon: typeof Bookmark }[] = [
-        { key: "watchlist", label: "Watchlist", shortLabel: "List", icon: ListPlus },
-        { key: "watched", label: "Watched", shortLabel: "Seen", icon: Eye },
-        { key: "favorites", label: "Favorites", shortLabel: "Favs", icon: Heart },
+    const libraryTabs: { key: LibraryTab; label: string; icon: typeof Bookmark }[] = [
+        { key: "watchlist", label: "Watchlist", icon: ListPlus },
+        { key: "watched", label: "Watched", icon: Eye },
+        { key: "favorites", label: "Favorites", icon: Heart },
     ];
 
     const applyFilters = (movieList: Movie[]) => {
@@ -77,51 +77,136 @@ export default function Library({
         return filtered;
     };
 
+    const getTabCount = (tabKey: LibraryTab) => {
+        const tabMovies = tabKey === "watchlist"
+            ? movies.filter(m => watchlist.includes(m.id))
+            : tabKey === "watched"
+                ? movies.filter(m => watched.includes(m.id))
+                : movies.filter(m => favorites.includes(m.id));
+        const filteredCount = applyFilters(tabMovies).length;
+        const loadedCount = tabMovies.length;
+        const savedCount = tabKey === "watchlist" ? watchlist.length
+            : tabKey === "watched" ? watched.length
+                : favorites.length;
+        return { filteredCount, loadedCount, savedCount };
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            style={{ overflowX: "hidden" }}
         >
             <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">Your Library</h2>
 
             {/* Library Tabs */}
-            <div className="flex w-full gap-1.5 sm:gap-2 mb-6">
-                {libraryTabs.map((tab) => {
-                    const Icon = tab.icon;
-                    const tabMovies = tab.key === "watchlist"
-                        ? movies.filter(m => watchlist.includes(m.id))
-                        : tab.key === "watched"
-                            ? movies.filter(m => watched.includes(m.id))
-                            : movies.filter(m => favorites.includes(m.id));
-                    const filteredCount = applyFilters(tabMovies).length;
-                    const loadedCount = tabMovies.length;
-                    const savedCount = tab.key === "watchlist" ? watchlist.length
-                        : tab.key === "watched" ? watched.length
-                            : favorites.length;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveLibraryTab(tab.key)}
-                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${activeLibraryTab === tab.key
-                                ? "bg-[var(--foreground)] text-[var(--background)]"
-                                : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
-                                }`}
-                        >
-                            <Icon size={14} className="flex-shrink-0" />
-                            <span className="hidden sm:inline">{tab.label}</span>
-                            <span className="sm:hidden">{tab.shortLabel}</span>
-                            {filteredCount > 0 && (
-                                <span className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs rounded-full flex-shrink-0 leading-none ${activeLibraryTab === tab.key
-                                    ? "bg-[var(--background)] text-[var(--foreground)]"
-                                    : "bg-[var(--card-border)] text-[var(--foreground)]"
-                                    }`}>
-                                    {filteredCount}{loadedCount > filteredCount ? `/${loadedCount}` : savedCount > loadedCount ? `/${savedCount}` : ""}
+            <div className="mb-6">
+                {/* Mobile: segmented control - guaranteed to fit */}
+                <div
+                    className="sm:hidden rounded-xl p-1 flex"
+                    style={{
+                        backgroundColor: "var(--card-bg)",
+                        border: "1px solid var(--card-border)",
+                        width: "100%",
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                    }}
+                >
+                    {libraryTabs.map((tab) => {
+                        const Icon = tab.icon;
+                        const { filteredCount } = getTabCount(tab.key);
+                        const isActive = activeLibraryTab === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveLibraryTab(tab.key)}
+                                style={{
+                                    flex: "1 1 0%",
+                                    minWidth: 0,
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: "2px",
+                                    padding: "8px 4px",
+                                    borderRadius: "8px",
+                                    fontSize: "11px",
+                                    fontWeight: 500,
+                                    transition: "all 0.2s",
+                                    backgroundColor: isActive ? "var(--foreground)" : "transparent",
+                                    color: isActive ? "var(--background)" : "var(--muted)",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    position: "relative",
+                                }}
+                            >
+                                <div style={{ position: "relative", display: "inline-flex" }}>
+                                    <Icon size={16} />
+                                    {filteredCount > 0 && (
+                                        <span
+                                            style={{
+                                                position: "absolute",
+                                                top: "-6px",
+                                                right: "-10px",
+                                                minWidth: "14px",
+                                                height: "14px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                padding: "0 3px",
+                                                fontSize: "8px",
+                                                fontWeight: 700,
+                                                borderRadius: "7px",
+                                                lineHeight: 1,
+                                                backgroundColor: isActive ? "var(--background)" : "var(--foreground)",
+                                                color: isActive ? "var(--foreground)" : "var(--background)",
+                                            }}
+                                        >
+                                            {filteredCount}
+                                        </span>
+                                    )}
+                                </div>
+                                <span style={{
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    maxWidth: "100%",
+                                }}>
+                                    {tab.label}
                                 </span>
-                            )}
-                        </button>
-                    );
-                })}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Desktop: original pill tabs */}
+                <div className="hidden sm:flex gap-2">
+                    {libraryTabs.map((tab) => {
+                        const Icon = tab.icon;
+                        const { filteredCount, loadedCount, savedCount } = getTabCount(tab.key);
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveLibraryTab(tab.key)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeLibraryTab === tab.key
+                                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                                    : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
+                                    }`}
+                            >
+                                <Icon size={16} />
+                                {tab.label}
+                                {filteredCount > 0 && (
+                                    <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeLibraryTab === tab.key
+                                        ? "bg-[var(--background)] text-[var(--foreground)]"
+                                        : "bg-[var(--card-border)] text-[var(--foreground)]"
+                                        }`}>
+                                        {filteredCount}{loadedCount > filteredCount ? `/${loadedCount}` : savedCount > loadedCount ? `/${savedCount}` : ""}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {/* Nudge: Has watchlist but no watched */}
