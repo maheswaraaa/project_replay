@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
-    getTrending, getPopular, getTopRated, getNowPlaying,
+    getTrending, getPopular, getTopRated, getNowPlaying, getUpcoming,
     discoverMovies, searchMovies,
     getTrendingTV, getPopularTV, getTopRatedTV, getOnTheAirTV,
     discoverTV, searchTV,
@@ -133,6 +133,7 @@ export function useMediaContent(params: UseMediaContentParams) {
                 top_rated: () => getTopRatedTV(pageNum),
                 now_playing: () => getOnTheAirTV(pageNum),
                 trending: () => getTrendingTV("week", pageNum),
+                coming_soon: () => getOnTheAirTV(pageNum), // TV doesn't have "upcoming", use on_the_air
             };
             const tvRes = await (fetchers[activeTab] || fetchers.trending)();
             return { ...tvRes, results: mapTVToMovie(tvRes.results) };
@@ -143,6 +144,7 @@ export function useMediaContent(params: UseMediaContentParams) {
             top_rated: () => getTopRated(pageNum),
             now_playing: () => getNowPlaying(pageNum),
             trending: () => getTrending("week", pageNum),
+            coming_soon: () => getUpcoming(pageNum),
         };
         return (fetchers[activeTab] || fetchers.trending)();
     }, [activeTab]);

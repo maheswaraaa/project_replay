@@ -95,9 +95,10 @@ export default function Header({
         setActiveProvider(null);
     };
 
+    const currentYear = new Date().getFullYear();
     const yearOptions = Array.from({ length: 35 }, (_, i) => ({
-        value: String(2025 - i),
-        label: String(2025 - i),
+        value: String(currentYear - i),
+        label: String(currentYear - i),
     }));
 
     const genreOptions = (activeMediaType === "tv" ? TV_GENRES : GENRES).map((g) => ({
