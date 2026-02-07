@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-    ListPlus, Eye, Heart, Loader2, Sparkles,
+    ListPlus, Eye, Heart, Loader2, Sparkles, Info,
 } from "lucide-react";
 import type { Movie } from "@/lib/tmdb";
 import MediaTypeToggle from "./MediaTypeToggle";
@@ -31,6 +31,7 @@ interface LibraryViewProps {
     activeGenre: number | null;
     activeYear: number | null;
     activeLanguage: string | null;
+    activeProvider: string | null;
     onOpenDetail: (movie: Movie) => void;
     onToggleWatchlist: (id: number, e?: React.MouseEvent) => void;
     onMarkWatched: (id: number, e?: React.MouseEvent) => void;
@@ -84,6 +85,9 @@ function applyLibraryFilters(
 
     if (activeLanguage) filtered = filtered.filter((m) => m.original_language === activeLanguage);
 
+    // Note: Provider filtering not available in Library (would require extra API calls)
+    // This will be available when user accounts are implemented
+
     return filtered;
 }
 
@@ -133,6 +137,7 @@ export default function LibraryView({
     activeGenre,
     activeYear,
     activeLanguage,
+    activeProvider,
     onOpenDetail,
     onToggleWatchlist,
     onMarkWatched,
@@ -198,6 +203,24 @@ export default function LibraryView({
                 />
             </motion.div>
 
+            {/* Provider filter notice */}
+            <AnimatePresence>
+                {activeProvider && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10, height: 0 }}
+                        animate={{ opacity: 1, y: 0, height: "auto" }}
+                        exit={{ opacity: 0, y: -10, height: 0 }}
+                        className="mb-4 p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl flex items-center gap-3"
+                    >
+                        <Info size={18} className="text-[var(--muted)] flex-shrink-0" />
+                        <p className="text-sm text-[var(--muted)]">
+                            Streaming service filter is not available in Library.
+                            <span className="text-[var(--foreground)]"> Use it on Home or Search.</span>
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {libraryLoading && (
                 <motion.div
                     className="flex items-center gap-2 mb-4 text-[var(--muted)]"
@@ -257,7 +280,7 @@ export default function LibraryView({
                                         <motion.div
                                             layoutId="activeLibraryTabMobile"
                                             className="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--foreground)] rounded-full"
-                                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                            transition={{ type: "spring" as const, stiffness: 400, damping: 30 }}
                                         />
                                     )}
                                 </button>
@@ -290,7 +313,7 @@ export default function LibraryView({
                                     <motion.div
                                         layoutId="activeLibraryTabDesktop"
                                         className="absolute inset-0 bg-[var(--foreground)] rounded-full"
-                                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                        transition={{ type: "spring" as const, stiffness: 400, damping: 30 }}
                                     />
                                 )}
                                 <span className="relative z-10 flex items-center gap-2">

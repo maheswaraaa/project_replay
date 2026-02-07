@@ -1,17 +1,22 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     remotePatterns: [
       {
         protocol: "https",
         hostname: "image.tmdb.org",
+        pathname: "/t/p/**",
       },
     ],
-    minimumCacheTTL: 60 * 60 * 24 * 30, // cache for 30 days
-    deviceSizes: [640, 750, 828, 1080, 1200],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    // Increase cache time to reduce re-fetching
+    minimumCacheTTL: 60 * 60 * 24, // 24 hours
+  },
+  // Increase timeout for external image fetching
+  staticPageGenerationTimeout: 120,
+  experimental: {
+    // Increase timeout for image optimization
+    imgOptTimeoutMs: 30000, // 30 seconds (default is 7 seconds)
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

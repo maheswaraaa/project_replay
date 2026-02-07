@@ -234,6 +234,7 @@ export default function HomePage() {
             activeGenre={activeGenre}
             activeYear={activeYear}
             activeLanguage={activeLanguage}
+            activeProvider={activeProvider}  // Add this line
             onOpenDetail={openDetail}
             onToggleWatchlist={toggleWatchlist}
             onMarkWatched={markAsWatched}
