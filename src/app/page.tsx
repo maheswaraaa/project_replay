@@ -69,6 +69,13 @@ import {
   getMediaDate,
 } from "@/lib/tmdb";
 import MovieListItem from "@/components/MovieListItem";
+import {
+  useFilters,
+  useLibrary,
+  useMediaDetail,
+  useMediaContent,
+  useLibraryContent,
+} from "@/hooks";
 
 type Tab = "trending" | "popular" | "top_rated" | "now_playing";
 type NavItem = "home" | "search" | "library" | "profile";
@@ -77,12 +84,31 @@ type LibraryTab = "watchlist" | "watched" | "favorites";
 const easeOut = [0.25, 0.46, 0.45, 0.94] as const;
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("trending");
-  const [activeGenre, setActiveGenre] = useState<number | null>(null);
-  const [activeYear, setActiveYear] = useState<number | null>(null);
-  const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
-  const [activeSortBy, setActiveSortBy] = useState<string>("popularity.desc");
-  const [activeProvider, setActiveProvider] = useState<string | null>(null);
+  // Filter state from hook
+  const {
+    activeTab,
+    setActiveTab,
+    activeGenre,
+    setActiveGenre,
+    activeYear,
+    setActiveYear,
+    activeLanguage,
+    setActiveLanguage,
+    activeSortBy,
+    setActiveSortBy,
+    activeProvider,
+    setActiveProvider,
+    activeMediaType,
+    setActiveMediaType,
+    searchQuery,
+    setSearchQuery,
+    viewMode,
+    setViewMode,
+    clearFilters,
+    resetToDefaults,
+    hasActiveFilters,
+  } = useFilters();
+
   const [activeNav, setActiveNav] = useState<NavItem>("home");
   const [activeLibraryTab, setActiveLibraryTab] = useState<LibraryTab>("watchlist");
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -90,39 +116,41 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [selectedMovie, setSelectedMovie] = useState<MovieDetail | null>(null);
-  const [movieCast, setMovieCast] = useState<CastMember[]>([]);
-  const [movieWatchProviders, setMovieWatchProviders] = useState<WatchProvider[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [loadingModal, setLoadingModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
-  const [watchlist, setWatchlist] = useState<number[]>([]);
-  const [watched, setWatched] = useState<number[]>([]);
-  const [favorites, setFavorites] = useState<number[]>([]);
+  // Media detail state from hook
+  const {
+    selectedMovie,
+    selectedTVShow,
+    movieCast,
+    movieWatchProviders,
+    showModal,
+    loadingModal,
+    openMovieDetail,
+    openTVDetail,
+    closeModal,
+  } = useMediaDetail();
 
-  const [showFavoritePrompt, setShowFavoritePrompt] = useState(false);
-  const [promptMovieId, setPromptMovieId] = useState<number | null>(null);
+  // Library state from hook
+  const {
+    watchlist,
+    watched,
+    favorites,
+    toggleWatchlist,
+    markAsWatched,
+    toggleFavorite,
+    showFavoritePrompt,
+    promptMovieId,
+    handleFavoritePrompt,
+  } = useLibrary();
 
-  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [activeMediaType, setActiveMediaType] = useState<MediaType>("movie");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [selectedTVShow, setSelectedTVShow] = useState<TVShowDetail | null>(null);
   const [libraryMovies, setLibraryMovies] = useState<Movie[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const savedWatchlist = localStorage.getItem("replay_watchlist");
-    const savedWatched = localStorage.getItem("replay_watched");
-    const savedFavorites = localStorage.getItem("replay_favorites");
-    if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
-    if (savedWatched) setWatched(JSON.parse(savedWatched));
-    if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
-  }, []);
+
 
   const fetchContent = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (pageNum === 1) setLoading(true);
@@ -134,34 +162,80 @@ export default function HomePage() {
       const isTV = activeMediaType === "tv";
 
       if (searchQuery && activeNav === "search") {
-        if (isTV) {
-          const tvResponse = await searchTV(searchQuery, pageNum);
+        // If streaming provider is selected, use discover endpoint
+        // because TMDB search API doesn't support provider filtering
+        if (activeProvider) {
+          if (isTV) {
+            const tvResponse = await discoverTV({
+              genreId: activeGenre,
+              year: activeYear,
+              language: activeLanguage,
+              watchProviders: activeProvider,
+              sortBy: activeSortBy,
+              page: pageNum,
+            });
+            response = {
+              ...tvResponse,
+              results: tvResponse.results.map(tv => ({
+                ...tv,
+                title: tv.name,
+                original_title: tv.original_name,
+                release_date: tv.first_air_date,
+                media_type: "tv" as const,
+              })) as unknown as Movie[]
+            };
+          } else {
+            response = await discoverMovies({
+              genreId: activeGenre,
+              year: activeYear,
+              language: activeLanguage,
+              watchProviders: activeProvider,
+              sortBy: activeSortBy,
+              page: pageNum,
+            });
+          }
+
+          // Client-side filter by search query on discover results
+          const query = searchQuery.toLowerCase();
           response = {
-            ...tvResponse,
-            results: tvResponse.results.map(tv => ({
-              ...tv,
-              title: tv.name,
-              original_title: tv.original_name,
-              release_date: tv.first_air_date,
-              media_type: "tv" as const,
-            })) as unknown as Movie[]
+            ...response,
+            results: response.results.filter(m =>
+              m.title.toLowerCase().includes(query) ||
+              m.original_title?.toLowerCase().includes(query)
+            )
           };
         } else {
-          response = await searchMovies(searchQuery, pageNum);
-        }
+          // No provider filter — use normal search API
+          if (isTV) {
+            const tvResponse = await searchTV(searchQuery, pageNum);
+            response = {
+              ...tvResponse,
+              results: tvResponse.results.map(tv => ({
+                ...tv,
+                title: tv.name,
+                original_title: tv.original_name,
+                release_date: tv.first_air_date,
+                media_type: "tv" as const,
+              })) as unknown as Movie[]
+            };
+          } else {
+            response = await searchMovies(searchQuery, pageNum);
+          }
 
-        response = {
-          ...response,
-          results: response.results.filter(m => {
-            if (activeYear) {
-              const releaseYear = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
-              if (releaseYear !== activeYear) return false;
-            }
-            if (activeLanguage && m.original_language !== activeLanguage) return false;
-            if (activeGenre && !m.genre_ids?.includes(activeGenre)) return false;
-            return true;
-          })
-        };
+          // Client-side filtering for year/language/genre
+          response = {
+            ...response,
+            results: response.results.filter(m => {
+              if (activeYear) {
+                const releaseYear = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
+                if (releaseYear !== activeYear) return false;
+              }
+              if (activeLanguage && m.original_language !== activeLanguage) return false;
+              if (activeGenre && !m.genre_ids?.includes(activeGenre)) return false;
+              return true;
+            })
+          };
+        }
       } else if (hasFilters) {
         if (isTV) {
           const tvResponse = await discoverTV({
@@ -366,62 +440,7 @@ export default function HomePage() {
     return () => observerRef.current?.disconnect();
   }, [loading, hasMore, loadingMore, page, fetchContent, activeNav]);
 
-  const openMovieDetail = async (movieId: number) => {
-    setLoadingModal(true);
-    setShowModal(true);
-    setMovieWatchProviders([]);
-    setSelectedTVShow(null);
-    document.body.style.overflow = "hidden";
-
-    try {
-      const [details, credits, watchProviders] = await Promise.all([
-        getMovieDetails(movieId),
-        getMovieCredits(movieId),
-        getWatchProviders(movieId),
-      ]);
-      setSelectedMovie(details);
-      setMovieCast(credits.cast.slice(0, 10));
-
-      const usProviders = watchProviders.results?.US;
-      if (usProviders?.flatrate) {
-        setMovieWatchProviders(usProviders.flatrate);
-      }
-    } catch (error) {
-      console.error("Failed to fetch movie details:", error);
-      closeModal();
-    } finally {
-      setLoadingModal(false);
-    }
-  };
-
-  const openTVDetail = async (tvId: number) => {
-    setLoadingModal(true);
-    setShowModal(true);
-    setMovieWatchProviders([]);
-    setSelectedMovie(null);
-    document.body.style.overflow = "hidden";
-
-    try {
-      const [details, credits, watchProviders] = await Promise.all([
-        getTVShowDetails(tvId),
-        getTVShowCredits(tvId),
-        getTVWatchProviders(tvId),
-      ]);
-      setSelectedTVShow(details);
-      setMovieCast(credits.cast.slice(0, 10));
-
-      const usProviders = watchProviders.results?.US;
-      if (usProviders?.flatrate) {
-        setMovieWatchProviders(usProviders.flatrate);
-      }
-    } catch (error) {
-      console.error("Failed to fetch TV show details:", error);
-      closeModal();
-    } finally {
-      setLoadingModal(false);
-    }
-  };
-
+  // Wrapper for openDetail that includes activeMediaType context
   const openDetail = (item: Movie) => {
     if (!item || typeof item.id !== 'number') {
       console.error("Invalid item passed to openDetail:", item);
@@ -439,76 +458,10 @@ export default function HomePage() {
     }
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedMovie(null);
-    setSelectedTVShow(null);
-    setMovieCast([]);
-    setMovieWatchProviders([]);
-    document.body.style.overflow = "auto";
-  };
-
-  const toggleWatchlist = (movieId: number, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setWatchlist((prev: number[]) => {
-      const newList = prev.includes(movieId)
-        ? prev.filter((id: number) => id !== movieId)
-        : [...prev, movieId];
-      localStorage.setItem("replay_watchlist", JSON.stringify(newList));
-      return newList;
-    });
-  };
-
-  const markAsWatched = (movieId: number, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-
-    if (watched.includes(movieId)) {
-      setWatched((prev: number[]) => {
-        const newList = prev.filter((id: number) => id !== movieId);
-        localStorage.setItem("replay_watched", JSON.stringify(newList));
-        return newList;
-      });
-      return;
-    }
-
-    setWatchlist((prev: number[]) => {
-      const newList = prev.filter((id: number) => id !== movieId);
-      localStorage.setItem("replay_watchlist", JSON.stringify(newList));
-      return newList;
-    });
-
-    setWatched((prev: number[]) => {
-      const newList = [...prev, movieId];
-      localStorage.setItem("replay_watched", JSON.stringify(newList));
-      return newList;
-    });
-
-    setPromptMovieId(movieId);
-    setShowFavoritePrompt(true);
-  };
-
-  const toggleFavorite = (movieId: number, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setFavorites((prev: number[]) => {
-      const newList = prev.includes(movieId)
-        ? prev.filter((id: number) => id !== movieId)
-        : [...prev, movieId];
-      localStorage.setItem("replay_favorites", JSON.stringify(newList));
-      return newList;
-    });
-  };
-
-  const handleFavoritePrompt = (addToFavorites: boolean) => {
-    if (addToFavorites && promptMovieId) {
-      toggleFavorite(promptMovieId);
-    }
-    setShowFavoritePrompt(false);
-    setPromptMovieId(null);
-  };
-
   const applyFilters = (movieList: Movie[]) => {
     let filtered = movieList;
 
+    // Search query filter (Library only - Search uses API)
     if (searchQuery && activeNav === "library") {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(m =>
@@ -517,6 +470,7 @@ export default function HomePage() {
       );
     }
 
+    // Media type filter (Library only)
     if (activeNav === "library" && activeMediaType !== "all") {
       filtered = filtered.filter(m => {
         const itemMediaType = (m as unknown as { media_type?: string }).media_type;
@@ -543,6 +497,11 @@ export default function HomePage() {
     if (activeLanguage) {
       filtered = filtered.filter(m => m.original_language === activeLanguage);
     }
+
+    // Note: Streaming provider can't be filtered client-side in Library
+    // because we don't have provider data stored per movie.
+    // This is a TMDB API limitation - provider info requires individual
+    // movie detail calls. We skip it here for performance.
 
     return filtered;
   };
@@ -814,7 +773,10 @@ export default function HomePage() {
               <div className="hidden lg:flex items-center gap-1.5">
                 <div className="flex flex-nowrap rounded-full bg-[var(--card-bg)]/60 p-0.5 shrink-0">
                   <button
-                    onClick={() => setActiveMediaType("movie")}
+                    onClick={() => {
+                      setActiveMediaType("movie");
+                      setActiveGenre(null);
+                    }}
                     className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-all duration-200 ${activeMediaType === "movie"
                       ? "bg-[var(--foreground)] text-[var(--background)]"
                       : "text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -824,7 +786,10 @@ export default function HomePage() {
                     Movies
                   </button>
                   <button
-                    onClick={() => setActiveMediaType("tv")}
+                    onClick={() => {
+                      setActiveMediaType("tv");
+                      setActiveGenre(null);
+                    }}
                     className={`flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-all duration-200 ${activeMediaType === "tv"
                       ? "bg-[var(--foreground)] text-[var(--background)]"
                       : "text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -962,7 +927,10 @@ export default function HomePage() {
 
                   <div className="flex rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5 shrink-0">
                     <button
-                      onClick={() => setActiveMediaType("movie")}
+                      onClick={() => {
+                        setActiveMediaType("movie");
+                        setActiveGenre(null);
+                      }}
                       className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "movie"
                         ? "bg-[var(--foreground)] text-[var(--background)]"
                         : "text-[var(--muted)]"
@@ -972,7 +940,10 @@ export default function HomePage() {
                       <span className="hidden xs:inline">Movies</span>
                     </button>
                     <button
-                      onClick={() => setActiveMediaType("tv")}
+                      onClick={() => {
+                        setActiveMediaType("tv");
+                        setActiveGenre(null);
+                      }}
                       className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "tv"
                         ? "bg-[var(--foreground)] text-[var(--background)]"
                         : "text-[var(--muted)]"
@@ -1015,7 +986,7 @@ export default function HomePage() {
       {/* Mobile Search Bar */}
       {activeNav === "search" && (
         <div className="lg:hidden sticky top-14 z-30 bg-[var(--background)] px-4 py-3 border-b border-[var(--card-border)]">
-          <div className="relative">
+          <div className="relative mb-2">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
             <input
               type="text"
@@ -1025,6 +996,59 @@ export default function HomePage() {
               autoFocus
               className="w-full pl-10 pr-4 py-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20 transition-all"
             />
+          </div>
+          {/* Search filters row */}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5 shrink-0">
+              <button
+                onClick={() => {
+                  setActiveMediaType("movie");
+                  setActiveGenre(null);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "movie"
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "text-[var(--muted)]"
+                  }`}
+              >
+                <Clapperboard size={12} />
+                Movies
+              </button>
+              <button
+                onClick={() => {
+                  setActiveMediaType("tv");
+                  setActiveGenre(null);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${activeMediaType === "tv"
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "text-[var(--muted)]"
+                  }`}
+              >
+                <MonitorPlay size={12} />
+                TV
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowMobileFilters(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl shrink-0 transition-all duration-200 ${(activeGenre || activeYear || activeLanguage || activeProvider)
+                ? "bg-[var(--foreground)] text-[var(--background)]"
+                : "bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--muted)]"
+                }`}
+            >
+              <Filter size={14} />
+              {(activeGenre || activeYear || activeLanguage || activeProvider) && (
+                <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-[var(--background)]/20 font-bold">
+                  {[activeGenre, activeYear, activeLanguage, activeProvider].filter(Boolean).length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setViewMode(prev => prev === "grid" ? "list" : "grid")}
+              className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl transition-colors shrink-0"
+            >
+              {viewMode === "grid" ? <List size={14} /> : <LayoutGrid size={14} />}
+            </button>
           </div>
         </div>
       )}
@@ -1990,7 +2014,7 @@ export default function HomePage() {
                     className="w-full p-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--foreground)]/20"
                   >
                     <option value="">All Genres</option>
-                    {GENRES.map((genre) => (
+                    {(activeMediaType === "tv" ? TV_GENRES : GENRES).map((genre) => (
                       <option key={genre.id} value={genre.id}>{genre.name}</option>
                     ))}
                   </select>
@@ -2087,9 +2111,17 @@ export default function HomePage() {
             <motion.button
               key={item.key}
               onClick={() => {
+                const prevNav = activeNav;
                 setActiveNav(item.key);
-                if (item.key === "home") {
+
+                // Clear filters and search when switching sections
+                if (item.key !== prevNav) {
                   setSearchQuery("");
+                  setActiveGenre(null);
+                  setActiveYear(null);
+                  setActiveLanguage(null);
+                  setActiveProvider(null);
+                  setActiveSortBy("popularity.desc");
                 }
               }}
               className="relative flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-colors duration-200"
