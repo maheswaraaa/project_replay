@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   getMovieDetails, getTVShowDetails,
   type Movie,
@@ -20,6 +20,7 @@ import MobileFilterSheet from "@/components/MobileFilterSheet";
 import LibraryView from "@/components/LibraryView";
 import ProfileView from "@/components/ProfileView";
 import EmptyState from "@/components/EmptyState";
+import SkeletonGrid from "@/components/SkeletonGrid";
 
 export default function HomePage() {
   const {
@@ -201,6 +202,7 @@ export default function HomePage() {
                 <MediaGrid
                   movies={movies}
                   loading={loading}
+                  loadingMore={loadingMore}
                   viewMode={viewMode}
                   watchlist={watchlist}
                   watched={watched}
@@ -210,9 +212,7 @@ export default function HomePage() {
                   onMarkWatched={markAsWatched}
                   onToggleFavorite={toggleFavorite}
                 />
-                <div ref={loadMoreRef} className="flex justify-center py-8">
-                  {loadingMore && <Loader2 size={24} className="text-[var(--muted)] animate-spin" />}
-                </div>
+                <div ref={loadMoreRef} className="h-4" />
               </>
             )}
           </>
@@ -234,6 +234,7 @@ export default function HomePage() {
             activeGenre={activeGenre}
             activeYear={activeYear}
             activeLanguage={activeLanguage}
+            activeProvider={activeProvider}  // Add this line
             onOpenDetail={openDetail}
             onToggleWatchlist={toggleWatchlist}
             onMarkWatched={markAsWatched}
