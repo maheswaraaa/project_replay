@@ -96,87 +96,51 @@ export default function Library({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-            style={{ overflowX: "hidden" }}
         >
             <h2 className="text-xl font-bold text-[var(--foreground)] mb-4">Your Library</h2>
 
             {/* Library Tabs */}
             <div className="mb-6">
-                {/* Mobile: segmented control - guaranteed to fit */}
-                <div
-                    className="sm:hidden rounded-xl p-1 flex"
-                    style={{
-                        backgroundColor: "var(--card-bg)",
-                        border: "1px solid var(--card-border)",
-                        width: "100%",
-                        maxWidth: "100%",
-                        boxSizing: "border-box",
-                    }}
-                >
-                    {libraryTabs.map((tab) => {
-                        const Icon = tab.icon;
-                        const { filteredCount } = getTabCount(tab.key);
-                        const isActive = activeLibraryTab === tab.key;
-                        return (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveLibraryTab(tab.key)}
-                                style={{
-                                    flex: "1 1 0%",
-                                    minWidth: 0,
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    gap: "2px",
-                                    padding: "8px 4px",
-                                    borderRadius: "8px",
-                                    fontSize: "11px",
-                                    fontWeight: 500,
-                                    transition: "all 0.2s",
-                                    backgroundColor: isActive ? "var(--foreground)" : "transparent",
-                                    color: isActive ? "var(--background)" : "var(--muted)",
-                                    border: "none",
-                                    cursor: "pointer",
-                                    position: "relative",
-                                }}
-                            >
-                                <div style={{ position: "relative", display: "inline-flex" }}>
-                                    <Icon size={16} />
-                                    {filteredCount > 0 && (
-                                        <span
-                                            style={{
-                                                position: "absolute",
-                                                top: "-6px",
-                                                right: "-10px",
-                                                minWidth: "14px",
-                                                height: "14px",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                padding: "0 3px",
-                                                fontSize: "8px",
-                                                fontWeight: 700,
-                                                borderRadius: "7px",
-                                                lineHeight: 1,
-                                                backgroundColor: isActive ? "var(--background)" : "var(--foreground)",
-                                                color: isActive ? "var(--foreground)" : "var(--background)",
-                                            }}
-                                        >
-                                            {filteredCount}
-                                        </span>
+                {/* Mobile: underline tabs */}
+                <div className="sm:hidden border-b border-[var(--card-border)]">
+                    <div className="flex">
+                        {libraryTabs.map((tab) => {
+                            const Icon = tab.icon;
+                            const { filteredCount } = getTabCount(tab.key);
+                            const isActive = activeLibraryTab === tab.key;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveLibraryTab(tab.key)}
+                                    className="flex-1 relative"
+                                >
+                                    <div className={`flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors duration-200 ${isActive
+                                            ? "text-[var(--foreground)]"
+                                            : "text-[var(--muted)]"
+                                        }`}>
+                                        <Icon size={14} />
+                                        <span>{tab.label}</span>
+                                        {filteredCount > 0 && (
+                                            <span className={`min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold rounded-full leading-none ${isActive
+                                                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                                                    : "bg-[var(--card-border)] text-[var(--muted)]"
+                                                }`}>
+                                                {filteredCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {/* Active indicator bar */}
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="activeLibraryTab"
+                                            className="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--foreground)] rounded-full"
+                                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                        />
                                     )}
-                                </div>
-                                <span style={{
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    maxWidth: "100%",
-                                }}>
-                                    {tab.label}
-                                </span>
-                            </button>
-                        );
-                    })}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Desktop: original pill tabs */}

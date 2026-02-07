@@ -46,7 +46,6 @@ import {
   GENRES,
   LANGUAGES,
   WATCH_PROVIDERS,
-  // TV Show imports
   getTrendingTV,
   getPopularTV,
   getTopRatedTV,
@@ -74,7 +73,6 @@ type Tab = "trending" | "popular" | "top_rated" | "now_playing";
 type NavItem = "home" | "search" | "library" | "profile";
 type LibraryTab = "watchlist" | "watched" | "favorites";
 
-// Simplified animation ease for performance
 const easeOut = [0.25, 0.46, 0.45, 0.94];
 
 export default function HomePage() {
@@ -98,38 +96,24 @@ export default function HomePage() {
   const [loadingModal, setLoadingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Library states - new structure
   const [watchlist, setWatchlist] = useState<number[]>([]);
   const [watched, setWatched] = useState<number[]>([]);
   const [favorites, setFavorites] = useState<number[]>([]);
 
-  // Dialog state for "Add to favorites?" prompt
   const [showFavoritePrompt, setShowFavoritePrompt] = useState(false);
   const [promptMovieId, setPromptMovieId] = useState<number | null>(null);
 
-  // Hero carousel state
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-
-  // View mode state (grid or list)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-
-  // Media type filter state (movie, tv, or all)
   const [activeMediaType, setActiveMediaType] = useState<MediaType>("movie");
-
-  // Mobile filter sheet state
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-
-  // Selected TV show for modal
   const [selectedTVShow, setSelectedTVShow] = useState<TVShowDetail | null>(null);
-
-  // Library content state - dedicated storage for library items
   const [libraryMovies, setLibraryMovies] = useState<Movie[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Load saved data from localStorage
   useEffect(() => {
     const savedWatchlist = localStorage.getItem("replay_watchlist");
     const savedWatched = localStorage.getItem("replay_watched");
@@ -139,7 +123,6 @@ export default function HomePage() {
     if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
   }, []);
 
-  // Fetch content (movies or TV shows) based on active filters and media type
   const fetchContent = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (pageNum === 1) setLoading(true);
     else setLoadingMore(true);
@@ -150,10 +133,8 @@ export default function HomePage() {
       const isTV = activeMediaType === "tv";
 
       if (searchQuery && activeNav === "search") {
-        // Search with filters active
         if (isTV) {
           const tvResponse = await searchTV(searchQuery, pageNum);
-          // Transform TV results to Movie-like structure for unified handling
           response = {
             ...tvResponse,
             results: tvResponse.results.map(tv => ({
@@ -168,24 +149,19 @@ export default function HomePage() {
           response = await searchMovies(searchQuery, pageNum);
         }
 
-        // Apply client-side filters to search results
         response = {
           ...response,
           results: response.results.filter(m => {
-            // Year filter
             if (activeYear) {
               const releaseYear = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
               if (releaseYear !== activeYear) return false;
             }
-            // Language filter
             if (activeLanguage && m.original_language !== activeLanguage) return false;
-            // Genre filter
             if (activeGenre && !m.genre_ids?.includes(activeGenre)) return false;
             return true;
           })
         };
       } else if (hasFilters) {
-        // Use discover endpoint when any filter is active
         if (isTV) {
           const tvResponse = await discoverTV({
             genreId: activeGenre,
@@ -216,7 +192,6 @@ export default function HomePage() {
           });
         }
       } else {
-        // Default tab-based fetching
         if (isTV) {
           let tvResponse;
           switch (activeTab) {
@@ -259,10 +234,8 @@ export default function HomePage() {
         }
       }
 
-      // Filter content that has poster images
       let newMovies = response.results.filter(m => m.poster_path);
 
-      // Client-side filtering to ensure results match filter criteria
       if (activeYear) {
         newMovies = newMovies.filter(m => {
           const releaseYear = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
@@ -281,7 +254,6 @@ export default function HomePage() {
       if (reset || pageNum === 1) {
         setMovies(newMovies);
       } else {
-        // Deduplicate: only add content that doesn't already exist
         setMovies(prev => {
           const existingIds = new Set(prev.map(m => m.id));
           const uniqueNewMovies = newMovies.filter(m => !existingIds.has(m.id));
@@ -299,7 +271,6 @@ export default function HomePage() {
     }
   }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, searchQuery, activeNav, activeMediaType]);
 
-  // Initial load and filter changes
   useEffect(() => {
     if (activeNav === "library" || activeNav === "profile") return;
     setPage(1);
@@ -307,7 +278,6 @@ export default function HomePage() {
     fetchContent(1, true);
   }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, activeNav, activeMediaType, fetchContent]);
 
-  // Search with debounce
   useEffect(() => {
     if (activeNav !== "search") return;
 
@@ -324,12 +294,10 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [searchQuery, activeNav, fetchContent]);
 
-  // Fetch library content when entering Library tab
   useEffect(() => {
     const fetchLibraryContent = async () => {
       if (activeNav !== "library") return;
 
-      // Get all unique IDs from library lists
       const allIds = [...new Set([...watchlist, ...watched, ...favorites])];
 
       if (allIds.length === 0) {
@@ -339,16 +307,13 @@ export default function HomePage() {
 
       setLibraryLoading(true);
 
-      // We'll fetch all items and let the state update handle deduplication
       const newItems = await Promise.all(
         allIds.map(async (id) => {
           try {
-            // Try as movie first
             const details = await getMovieDetails(id);
             return { ...details, media_type: "movie" } as Movie;
           } catch {
             try {
-              // Try as TV show if movie fails
               const details = await getTVShowDetails(id);
               return {
                 id: details.id,
@@ -367,14 +332,12 @@ export default function HomePage() {
                 media_type: "tv" as unknown,
               } as unknown as Movie;
             } catch {
-              // Item not found - might have been removed from TMDB
               return null;
             }
           }
         })
       );
 
-      // Set library movies (replaces old state)
       const validItems = newItems.filter(Boolean) as Movie[];
       setLibraryMovies(validItems);
       setLibraryLoading(false);
@@ -383,7 +346,6 @@ export default function HomePage() {
     fetchLibraryContent();
   }, [activeNav, watchlist, watched, favorites]);
 
-  // Infinite scroll observer
   useEffect(() => {
     if (loading || activeNav === "library" || activeNav === "profile") return;
 
@@ -403,12 +365,11 @@ export default function HomePage() {
     return () => observerRef.current?.disconnect();
   }, [loading, hasMore, loadingMore, page, fetchContent, activeNav]);
 
-  // Open movie detail modal
   const openMovieDetail = async (movieId: number) => {
     setLoadingModal(true);
     setShowModal(true);
     setMovieWatchProviders([]);
-    setSelectedTVShow(null); // Clear any TV show
+    setSelectedTVShow(null);
     document.body.style.overflow = "hidden";
 
     try {
@@ -420,7 +381,6 @@ export default function HomePage() {
       setSelectedMovie(details);
       setMovieCast(credits.cast.slice(0, 10));
 
-      // Get US watch providers (flatrate = subscription streaming)
       const usProviders = watchProviders.results?.US;
       if (usProviders?.flatrate) {
         setMovieWatchProviders(usProviders.flatrate);
@@ -433,12 +393,11 @@ export default function HomePage() {
     }
   };
 
-  // Open TV show detail modal
   const openTVDetail = async (tvId: number) => {
     setLoadingModal(true);
     setShowModal(true);
     setMovieWatchProviders([]);
-    setSelectedMovie(null); // Clear any movie
+    setSelectedMovie(null);
     document.body.style.overflow = "hidden";
 
     try {
@@ -450,7 +409,6 @@ export default function HomePage() {
       setSelectedTVShow(details);
       setMovieCast(credits.cast.slice(0, 10));
 
-      // Get US watch providers (flatrate = subscription streaming)
       const usProviders = watchProviders.results?.US;
       if (usProviders?.flatrate) {
         setMovieWatchProviders(usProviders.flatrate);
@@ -463,17 +421,13 @@ export default function HomePage() {
     }
   };
 
-  // Handle opening detail based on media type
   const openDetail = (item: Movie) => {
-    // Validate the item and ID
     if (!item || typeof item.id !== 'number') {
       console.error("Invalid item passed to openDetail:", item);
       return;
     }
 
     const itemId = item.id;
-
-    // Check if this item is a TV show - prioritize item's own media_type over global filter
     const itemMediaType = (item as unknown as { media_type?: string }).media_type;
     const isTV = itemMediaType === "tv" || (itemMediaType === undefined && activeMediaType === "tv");
 
@@ -493,7 +447,6 @@ export default function HomePage() {
     document.body.style.overflow = "auto";
   };
 
-  // Toggle watchlist (add/remove from watchlist)
   const toggleWatchlist = (movieId: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setWatchlist((prev: number[]) => {
@@ -505,40 +458,34 @@ export default function HomePage() {
     });
   };
 
-  // Mark as watched / Unwatch (toggle)
   const markAsWatched = (movieId: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
 
-    // Check if already watched - if so, unwatch (no notification)
     if (watched.includes(movieId)) {
       setWatched((prev: number[]) => {
         const newList = prev.filter((id: number) => id !== movieId);
         localStorage.setItem("replay_watched", JSON.stringify(newList));
         return newList;
       });
-      return; // Don't show any prompt when unwatching
+      return;
     }
 
-    // Remove from watchlist if present
     setWatchlist((prev: number[]) => {
       const newList = prev.filter((id: number) => id !== movieId);
       localStorage.setItem("replay_watchlist", JSON.stringify(newList));
       return newList;
     });
 
-    // Add to watched
     setWatched((prev: number[]) => {
       const newList = [...prev, movieId];
       localStorage.setItem("replay_watched", JSON.stringify(newList));
       return newList;
     });
 
-    // Show favorite prompt only when marking as watched
     setPromptMovieId(movieId);
     setShowFavoritePrompt(true);
   };
 
-  // Toggle favorite
   const toggleFavorite = (movieId: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setFavorites((prev: number[]) => {
@@ -550,7 +497,6 @@ export default function HomePage() {
     });
   };
 
-  // Handle favorite prompt response
   const handleFavoritePrompt = (addToFavorites: boolean) => {
     if (addToFavorites && promptMovieId) {
       toggleFavorite(promptMovieId);
@@ -559,11 +505,9 @@ export default function HomePage() {
     setPromptMovieId(null);
   };
 
-  // Helper function to apply filters to any movie list
   const applyFilters = (movieList: Movie[]) => {
     let filtered = movieList;
 
-    // Search query filter (for Library filtering)
     if (searchQuery && activeNav === "library") {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(m =>
@@ -572,7 +516,6 @@ export default function HomePage() {
       );
     }
 
-    // Media type filter (Movies vs TV Shows) - applies in Library
     if (activeNav === "library" && activeMediaType !== "all") {
       filtered = filtered.filter(m => {
         const itemMediaType = (m as unknown as { media_type?: string }).media_type;
@@ -623,7 +566,6 @@ export default function HomePage() {
     { key: "profile", icon: User, label: "Profile" },
   ];
 
-  // Render movie grid (reusable)
   const renderMovieGrid = (movieList: Movie[], showEmpty = true) => {
     if (loading) {
       return (
@@ -668,18 +610,14 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Hover Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
 
-            {/* Rating Badge */}
             <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded-md text-xs">
               <Star size={10} className="text-yellow-400 fill-yellow-400" />
               <span className="text-white font-medium">{(movie.vote_average ?? 0).toFixed(1)}</span>
             </div>
 
-            {/* Quick Actions on Hover */}
             <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              {/* Add to Watchlist */}
               <button
                 onClick={(e) => toggleWatchlist(movie.id, e)}
                 className={`p-1.5 rounded-md backdrop-blur-sm transition-all duration-200 ${watchlist.includes(movie.id)
@@ -690,7 +628,6 @@ export default function HomePage() {
               >
                 <ListPlus size={12} className={watchlist.includes(movie.id) ? "fill-current" : ""} />
               </button>
-              {/* Mark as Watched */}
               <button
                 onClick={(e) => markAsWatched(movie.id, e)}
                 className={`p-1.5 rounded-md backdrop-blur-sm transition-all duration-200 group/eye ${watched.includes(movie.id)
@@ -708,7 +645,6 @@ export default function HomePage() {
                   </span>
                 )}
               </button>
-              {/* Add to Favorites */}
               <button
                 onClick={(e) => toggleFavorite(movie.id, e)}
                 className={`p-1.5 rounded-md backdrop-blur-sm transition-all duration-200 ${favorites.includes(movie.id)
@@ -721,7 +657,6 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Hover Info */}
             <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <h3 className="text-white text-sm font-medium line-clamp-2">{movie.title}</h3>
               <p className="text-white/60 text-xs mt-1">
@@ -734,7 +669,6 @@ export default function HomePage() {
     );
   };
 
-  // Render movie list view with swipe gestures
   const renderMovieList = (movieList: Movie[], showEmpty = true) => {
     if (loading) {
       return (
@@ -775,7 +709,6 @@ export default function HomePage() {
     );
   };
 
-  // List Item Component with swipe gestures for mobile
   const MovieListItem = ({
     movie,
     onOpenDetail,
@@ -805,10 +738,8 @@ export default function HomePage() {
 
     const handleDragEnd = () => {
       if (dragX > swipeThreshold) {
-        // Swiped RIGHT - Add to Watchlist
         onAddWatchlist();
       } else if (dragX < -swipeThreshold) {
-        // Swiped LEFT - Mark as Watched
         onMarkWatched();
       }
       setDragX(0);
@@ -817,10 +748,8 @@ export default function HomePage() {
 
     return (
       <div className="relative overflow-hidden rounded-xl">
-        {/* Swipe action backgrounds - only visible when dragging */}
         {isDragging && (
           <>
-            {/* Right Swipe Background - Watchlist (Yellow) */}
             {dragX > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -835,7 +764,6 @@ export default function HomePage() {
                 </div>
               </motion.div>
             )}
-            {/* Left Swipe Background - Watched (Green) */}
             {dragX < 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -853,7 +781,6 @@ export default function HomePage() {
           </>
         )}
 
-        {/* Main content - draggable with spring snap */}
         <motion.div
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
@@ -867,7 +794,6 @@ export default function HomePage() {
           className="relative flex gap-3 p-3 bg-[var(--card-bg)] rounded-xl cursor-pointer"
           style={{ touchAction: "pan-y" }}
         >
-          {/* Poster */}
           <div className="relative w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--card-border)]">
             {movie.poster_path ? (
               <Image
@@ -883,11 +809,9 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Info */}
           <div className="flex-1 min-w-0 py-0.5">
             <h3 className="text-sm font-semibold text-[var(--foreground)] line-clamp-1">{movie.title}</h3>
 
-            {/* Meta info row */}
             <div className="flex items-center gap-2 text-xs text-[var(--muted)] mt-1">
               <span>{movie.release_date?.split("-")[0] || "TBA"}</span>
               <span>•</span>
@@ -897,12 +821,10 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Overview - 2 lines */}
             <p className="text-xs text-[var(--muted)] mt-1.5 line-clamp-2 leading-relaxed">
               {movie.overview || "No description available."}
             </p>
 
-            {/* Status Badges */}
             {(isInWatchlist || isWatched || isFavorite) && (
               <div className="flex items-center gap-1 mt-2">
                 {isInWatchlist && (
@@ -918,7 +840,6 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Action Buttons - Visible on desktop, swipe on mobile */}
           <div className="hidden sm:flex flex-col items-center justify-center gap-1 flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); onAddWatchlist(); }}
@@ -952,7 +873,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Favorite button always visible (mobile too) */}
           <button
             onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
             className={`sm:hidden p-2 rounded-lg self-center flex-shrink-0 ${isFavorite
@@ -969,13 +889,11 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] pb-safe">
-      {/* Header - Hidden on Profile */}
+      {/* Header */}
       {activeNav !== "profile" && (
         <header className="sticky top-0 z-40 bg-[var(--background)]/95 backdrop-blur-md border-b border-[var(--card-border)]/10 header-safe">
           <div className="max-w-7xl mx-auto px-4">
-            {/* Single Row Header */}
             <div className="flex items-center h-14 gap-4">
-              {/* Logo */}
               <button
                 onClick={() => {
                   setActiveNav("home");
@@ -1002,10 +920,8 @@ export default function HomePage() {
                 <span className="text-[10px] text-[var(--muted)]">— Discover. Watch. Remember.</span>
               </button>
 
-              {/* Divider */}
               <div className="hidden md:block w-px h-5 bg-[var(--card-border)]/30" />
 
-              {/* Inline Tabs (Home only) */}
               {activeNav === "home" && (
                 <nav className="hidden md:flex items-center gap-1 flex-shrink-0">
                   {tabs.map((tab) => (
@@ -1030,7 +946,6 @@ export default function HomePage() {
                 </nav>
               )}
 
-              {/* Library Filter - Only shown when in Library tab on desktop */}
               {activeNav === "library" && (
                 <motion.div
                   className="hidden lg:block flex-1 max-w-md"
@@ -1051,7 +966,6 @@ export default function HomePage() {
                 </motion.div>
               )}
 
-              {/* Search Bar - Only shown when in Search tab on desktop */}
               {activeNav === "search" && (
                 <motion.div
                   className="hidden lg:block flex-1 max-w-xl"
@@ -1072,12 +986,9 @@ export default function HomePage() {
                 </motion.div>
               )}
 
-              {/* Spacer - pushes filter chips to the right */}
               {activeNav !== "library" && activeNav !== "search" && <div className="flex-1" />}
 
-              {/* Filter Chips */}
               <div className="hidden lg:flex items-center gap-1.5">
-                {/* Media Type Toggle */}
                 <div className="flex flex-nowrap rounded-full bg-[var(--card-bg)]/60 p-0.5 shrink-0">
                   <button
                     onClick={() => setActiveMediaType("movie")}
@@ -1101,7 +1012,6 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {/* Year */}
                 <div className="relative">
                   <select
                     value={activeYear || ""}
@@ -1119,7 +1029,6 @@ export default function HomePage() {
                   <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {/* Genre - Uses different genres for movies vs TV */}
                 <div className="relative">
                   <select
                     value={activeGenre || ""}
@@ -1137,7 +1046,6 @@ export default function HomePage() {
                   <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {/* Language */}
                 <div className="relative">
                   <select
                     value={activeLanguage || ""}
@@ -1155,7 +1063,6 @@ export default function HomePage() {
                   <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {/* Streaming Services */}
                 <div className="relative">
                   <select
                     value={activeProvider || ""}
@@ -1173,7 +1080,6 @@ export default function HomePage() {
                   <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
-                {/* Clear */}
                 {(activeGenre || activeYear || activeLanguage || activeProvider) && (
                   <button
                     onClick={() => {
@@ -1188,7 +1094,6 @@ export default function HomePage() {
                   </button>
                 )}
 
-                {/* View Toggle */}
                 <button
                   onClick={() => setViewMode(prev => prev === "grid" ? "list" : "grid")}
                   className="p-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)] rounded-full transition-colors"
@@ -1198,7 +1103,6 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {/* Library Button - Only show on desktop, mobile has bottom nav */}
               <button
                 onClick={() => setActiveNav("library")}
                 className={`hidden lg:flex p-2 rounded-full transition-all duration-200 flex-shrink-0 ${activeNav === "library"
@@ -1210,12 +1114,9 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Mobile Tabs Row - Compact Two-Row Layout */}
             {activeNav === "home" && (
               <div className="flex md:hidden flex-col gap-2 py-2">
-                {/* Row 1: Category Dropdown + Media Type + Filters */}
                 <div className="flex items-center gap-2">
-                  {/* Category Dropdown */}
                   <div className="relative flex-1">
                     <select
                       value={activeTab}
@@ -1236,7 +1137,6 @@ export default function HomePage() {
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--background)]" />
                   </div>
 
-                  {/* Media Type Toggle */}
                   <div className="flex rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5 shrink-0">
                     <button
                       onClick={() => setActiveMediaType("movie")}
@@ -1260,7 +1160,6 @@ export default function HomePage() {
                     </button>
                   </div>
 
-                  {/* Filter Button */}
                   <button
                     onClick={() => setShowMobileFilters(true)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl shrink-0 transition-all duration-200 ${(activeGenre || activeYear || activeLanguage || activeProvider)
@@ -1276,7 +1175,6 @@ export default function HomePage() {
                     )}
                   </button>
 
-                  {/* View Toggle */}
                   <button
                     onClick={() => setViewMode(prev => prev === "grid" ? "list" : "grid")}
                     className="p-2 text-[var(--muted)] hover:text-[var(--foreground)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl transition-colors shrink-0"
@@ -1291,7 +1189,7 @@ export default function HomePage() {
         </header>
       )}
 
-      {/* Mobile Search Bar - Only for Search tab, hidden on other views */}
+      {/* Mobile Search Bar */}
       {activeNav === "search" && (
         <div className="lg:hidden sticky top-14 z-30 bg-[var(--background)] px-4 py-3 border-b border-[var(--card-border)]">
           <div className="relative">
@@ -1310,7 +1208,7 @@ export default function HomePage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Home / Search Tab - Movie Grid */}
+        {/* Home / Search Tab */}
         {(activeNav === "home" || activeNav === "search") && (
           <>
             {activeNav === "search" && !searchQuery ? (
@@ -1322,7 +1220,6 @@ export default function HomePage() {
             ) : (
               <>
                 {viewMode === "grid" ? renderMovieGrid(movies) : renderMovieList(movies)}
-                {/* Load More Trigger */}
                 <div ref={loadMoreRef} className="flex justify-center py-8">
                   {loadingMore && (
                     <Loader2 size={24} className="text-[var(--muted)] animate-spin" />
@@ -1338,12 +1235,11 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.3, ease: easeOut }}
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-[var(--foreground)]">Your Library</h2>
 
-              {/* Media Type Filter for Library */}
               <div className="flex rounded-full bg-[var(--card-bg)] border border-[var(--card-border)] p-0.5">
                 <button
                   onClick={() => setActiveMediaType("movie")}
@@ -1368,7 +1264,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Loading indicator for library items */}
             {libraryLoading && (
               <div className="flex items-center gap-2 mb-4 text-[var(--muted)]">
                 <Loader2 size={16} className="animate-spin" />
@@ -1376,49 +1271,94 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Library Tabs */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-              {libraryTabs.map((tab) => {
-                const Icon = tab.icon;
-                // Get items for this tab from libraryMovies
-                const tabMovies = tab.key === "watchlist"
-                  ? libraryMovies.filter(m => watchlist.includes(m.id))
-                  : tab.key === "watched"
-                    ? libraryMovies.filter(m => watched.includes(m.id))
-                    : libraryMovies.filter(m => favorites.includes(m.id));
-                // Filtered count (what's displayed)
-                const filteredCount = applyFilters(tabMovies).length;
-                // Total loaded count
-                const loadedCount = tabMovies.length;
-                // Total saved count
-                const savedCount = tab.key === "watchlist" ? watchlist.length
-                  : tab.key === "watched" ? watched.length
-                    : favorites.length;
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveLibraryTab(tab.key)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeLibraryTab === tab.key
-                      ? "bg-[var(--foreground)] text-[var(--background)]"
-                      : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
-                      }`}
-                  >
-                    <Icon size={16} />
-                    {tab.label}
-                    {filteredCount > 0 && (
-                      <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeLibraryTab === tab.key
-                        ? "bg-[var(--background)] text-[var(--foreground)]"
-                        : "bg-[var(--card-border)] text-[var(--foreground)]"
-                        }`}>
-                        {filteredCount}{loadedCount > filteredCount ? `/${loadedCount}` : savedCount > loadedCount ? `/${savedCount}` : ""}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Library Tabs - Mobile: underline tabs, Desktop: pill tabs */}
+            <div className="mb-6">
+              {/* Mobile: underline tabs - no scroll needed */}
+              <div className="sm:hidden border-b border-[var(--card-border)]">
+                <div className="flex">
+                  {libraryTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const tabMovies = tab.key === "watchlist"
+                      ? libraryMovies.filter(m => watchlist.includes(m.id))
+                      : tab.key === "watched"
+                        ? libraryMovies.filter(m => watched.includes(m.id))
+                        : libraryMovies.filter(m => favorites.includes(m.id));
+                    const filteredCount = applyFilters(tabMovies).length;
+                    const isActive = activeLibraryTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveLibraryTab(tab.key)}
+                        className="flex-1 relative"
+                      >
+                        <div className={`flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors duration-200 ${isActive
+                            ? "text-[var(--foreground)]"
+                            : "text-[var(--muted)]"
+                          }`}>
+                          <Icon size={14} />
+                          <span>{tab.label}</span>
+                          {filteredCount > 0 && (
+                            <span className={`min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold rounded-full leading-none ${isActive
+                                ? "bg-[var(--foreground)] text-[var(--background)]"
+                                : "bg-[var(--card-border)] text-[var(--muted)]"
+                              }`}>
+                              {filteredCount}
+                            </span>
+                          )}
+                        </div>
+                        {isActive && (
+                          <motion.div
+                            layoutId="activeLibraryTab"
+                            className="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--foreground)] rounded-full"
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Desktop: original pill tabs */}
+              <div className="hidden sm:flex gap-2">
+                {libraryTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const tabMovies = tab.key === "watchlist"
+                    ? libraryMovies.filter(m => watchlist.includes(m.id))
+                    : tab.key === "watched"
+                      ? libraryMovies.filter(m => watched.includes(m.id))
+                      : libraryMovies.filter(m => favorites.includes(m.id));
+                  const filteredCount = applyFilters(tabMovies).length;
+                  const loadedCount = tabMovies.length;
+                  const savedCount = tab.key === "watchlist" ? watchlist.length
+                    : tab.key === "watched" ? watched.length
+                      : favorites.length;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveLibraryTab(tab.key)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${activeLibraryTab === tab.key
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)] hover:border-[var(--foreground)]/30"
+                        }`}
+                    >
+                      <Icon size={16} />
+                      {tab.label}
+                      {filteredCount > 0 && (
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeLibraryTab === tab.key
+                          ? "bg-[var(--background)] text-[var(--foreground)]"
+                          : "bg-[var(--card-border)] text-[var(--foreground)]"
+                          }`}>
+                          {filteredCount}{loadedCount > filteredCount ? `/${loadedCount}` : savedCount > loadedCount ? `/${savedCount}` : ""}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Nudge: Has watchlist but no watched */}
+            {/* Nudge */}
             {activeLibraryTab === "watchlist" && watchlist.length > 0 && watched.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -1432,7 +1372,7 @@ export default function HomePage() {
               </motion.div>
             )}
 
-            {/* Watchlist Tab Content */}
+            {/* Watchlist */}
             {activeLibraryTab === "watchlist" && (
               <>
                 {watchlist.length === 0 ? (
@@ -1462,7 +1402,7 @@ export default function HomePage() {
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          transition={{ delay: Math.min(index, 12) * 0.02, ease: easeOut }}
                           onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
@@ -1489,7 +1429,7 @@ export default function HomePage() {
               </>
             )}
 
-            {/* Watched Tab Content */}
+            {/* Watched */}
             {activeLibraryTab === "watched" && (
               <>
                 {watched.length === 0 ? (
@@ -1512,7 +1452,7 @@ export default function HomePage() {
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          transition={{ delay: Math.min(index, 12) * 0.02, ease: easeOut }}
                           onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
@@ -1534,7 +1474,7 @@ export default function HomePage() {
               </>
             )}
 
-            {/* Favorites Tab Content */}
+            {/* Favorites */}
             {activeLibraryTab === "favorites" && (
               <>
                 {favorites.length === 0 ? (
@@ -1557,7 +1497,7 @@ export default function HomePage() {
                           key={`${movie.id}-${index}`}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: Math.min(index, 12) * 0.02, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          transition={{ delay: Math.min(index, 12) * 0.02, ease: easeOut }}
                           onClick={() => openDetail(movie)}
                           className="poster-card relative aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-[var(--card-border)]"
                         >
@@ -1586,17 +1526,15 @@ export default function HomePage() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.3, ease: easeOut }}
             className="flex flex-col items-center py-4 min-h-[calc(100vh-8rem)]"
           >
-            {/* Compact Logo & Title Row */}
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1, duration: 0.4 }}
               className="flex items-center gap-3 mb-4"
             >
-              {/* Logo */}
               <div className="relative">
                 <div className="absolute inset-0 blur-2xl bg-gradient-to-br from-purple-500/30 via-pink-500/20 to-orange-500/30 rounded-full scale-150" />
                 <div className="relative w-14 h-14 rounded-2xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-lg flex items-center justify-center">
@@ -1616,7 +1554,6 @@ export default function HomePage() {
               </div>
             </motion.div>
 
-            {/* Stats Cards - Compact Grid */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1651,7 +1588,6 @@ export default function HomePage() {
               </button>
             </motion.div>
 
-            {/* Explore Button */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1667,7 +1603,6 @@ export default function HomePage() {
               </button>
             </motion.div>
 
-            {/* About Section - Compact */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1683,10 +1618,8 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* Spacer to push footer down */}
             <div className="flex-1" />
 
-            {/* Footer */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1723,7 +1656,6 @@ export default function HomePage() {
                 </div>
               ) : selectedTVShow ? (
                 <>
-                  {/* TV Show Backdrop Image */}
                   <div className="relative h-48 md:h-64">
                     {selectedTVShow.backdrop_path ? (
                       <Image
@@ -1737,7 +1669,6 @@ export default function HomePage() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[var(--card-bg)] via-transparent to-transparent" />
 
-                    {/* Close Button */}
                     <button
                       onClick={closeModal}
                       className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors"
@@ -1745,7 +1676,6 @@ export default function HomePage() {
                       <X size={20} className="text-white" />
                     </button>
 
-                    {/* Back Button (mobile) */}
                     <button
                       onClick={closeModal}
                       className="absolute top-4 left-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors md:hidden"
@@ -1754,10 +1684,8 @@ export default function HomePage() {
                     </button>
                   </div>
 
-                  {/* TV Show Content */}
                   <div className="px-5 pb-8 -mt-16 relative overflow-y-auto max-h-[calc(90vh-12rem)]">
                     <div className="flex gap-4 mb-4">
-                      {/* Poster */}
                       <div className="relative w-24 h-36 rounded-xl overflow-hidden shadow-xl flex-shrink-0 bg-[var(--card-border)]">
                         <Image
                           src={getImageUrl(selectedTVShow.poster_path, "w300") || ""}
@@ -1767,7 +1695,6 @@ export default function HomePage() {
                         />
                       </div>
 
-                      {/* Title & Meta */}
                       <div className="flex-1 pt-16">
                         <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedTVShow.name}</h2>
                         {selectedTVShow.tagline && (
@@ -1789,7 +1716,6 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Genres */}
                     <div className="flex flex-wrap gap-2 mb-4">
                       {selectedTVShow.genres?.map((genre) => (
                         <span
@@ -1801,7 +1727,6 @@ export default function HomePage() {
                       ))}
                     </div>
 
-                    {/* Seasons & Episodes Info */}
                     <div className="flex gap-4 mb-4 p-3 bg-[var(--background)] rounded-xl border border-[var(--card-border)]">
                       <div className="text-center flex-1">
                         <p className="text-2xl font-bold text-[var(--foreground)]">{selectedTVShow.number_of_seasons}</p>
@@ -1814,7 +1739,6 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex gap-2 mb-6">
                       <button
                         onClick={() => toggleWatchlist(selectedTVShow.id)}
@@ -1855,7 +1779,6 @@ export default function HomePage() {
                       </button>
                     </div>
 
-                    {/* Overview */}
                     <div className="mb-6">
                       <h3 className="font-semibold text-[var(--foreground)] mb-2">Overview</h3>
                       <p className="text-sm text-[var(--muted)] leading-relaxed">
@@ -1863,7 +1786,6 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {/* Seasons List */}
                     {selectedTVShow.seasons && selectedTVShow.seasons.length > 0 && (
                       <div className="mb-6">
                         <h3 className="font-semibold text-[var(--foreground)] mb-3">Seasons</h3>
@@ -1897,7 +1819,6 @@ export default function HomePage() {
                       </div>
                     )}
 
-                    {/* Watch Providers / Streaming */}
                     {movieWatchProviders.length > 0 && (
                       <div className="mb-6">
                         <h3 className="font-semibold text-[var(--foreground)] mb-3">Stream on</h3>
@@ -1926,7 +1847,6 @@ export default function HomePage() {
                       </div>
                     )}
 
-                    {/* Cast */}
                     {movieCast.length > 0 && (
                       <div>
                         <h3 className="font-semibold text-[var(--foreground)] mb-3">Cast</h3>
@@ -1958,7 +1878,6 @@ export default function HomePage() {
                 </>
               ) : selectedMovie ? (
                 <>
-                  {/* Backdrop Image */}
                   <div className="relative h-48 md:h-64">
                     {selectedMovie.backdrop_path ? (
                       <Image
@@ -1972,7 +1891,6 @@ export default function HomePage() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[var(--card-bg)] via-transparent to-transparent" />
 
-                    {/* Close Button */}
                     <button
                       onClick={closeModal}
                       className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors"
@@ -1980,7 +1898,6 @@ export default function HomePage() {
                       <X size={20} className="text-white" />
                     </button>
 
-                    {/* Back Button (mobile) */}
                     <button
                       onClick={closeModal}
                       className="absolute top-4 left-4 p-2 bg-black/50 backdrop-blur-sm rounded-full hover:bg-black/70 transition-colors md:hidden"
@@ -1989,10 +1906,8 @@ export default function HomePage() {
                     </button>
                   </div>
 
-                  {/* Content */}
                   <div className="px-5 pb-8 -mt-16 relative overflow-y-auto max-h-[calc(90vh-12rem)]">
                     <div className="flex gap-4 mb-4">
-                      {/* Poster */}
                       <div className="relative w-24 h-36 rounded-xl overflow-hidden shadow-xl flex-shrink-0 bg-[var(--card-border)]">
                         <Image
                           src={getImageUrl(selectedMovie.poster_path, "w300") || ""}
@@ -2002,7 +1917,6 @@ export default function HomePage() {
                         />
                       </div>
 
-                      {/* Title & Meta */}
                       <div className="flex-1 pt-16">
                         <h2 className="text-xl font-bold text-[var(--foreground)]">{selectedMovie.title}</h2>
                         {selectedMovie.tagline && (
@@ -2027,7 +1941,6 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Genres */}
                     <div className="flex flex-wrap gap-2 mb-4">
                       {selectedMovie.genres?.map((genre) => (
                         <span
@@ -2039,9 +1952,7 @@ export default function HomePage() {
                       ))}
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex gap-2 mb-6">
-                      {/* Add to Watchlist */}
                       <button
                         onClick={() => toggleWatchlist(selectedMovie.id)}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 font-semibold rounded-xl transition-all ${watchlist.includes(selectedMovie.id)
@@ -2052,7 +1963,6 @@ export default function HomePage() {
                         <ListPlus size={18} className={watchlist.includes(selectedMovie.id) ? "fill-current" : ""} />
                         {watchlist.includes(selectedMovie.id) ? "In Watchlist" : "Add to Watchlist"}
                       </button>
-                      {/* Mark as Watched */}
                       <button
                         onClick={() => markAsWatched(selectedMovie.id)}
                         className={`p-3 rounded-xl transition-all group/eye ${watched.includes(selectedMovie.id)
@@ -2070,7 +1980,6 @@ export default function HomePage() {
                           </>
                         )}
                       </button>
-                      {/* Add to Favorites */}
                       <button
                         onClick={() => toggleFavorite(selectedMovie.id)}
                         className={`p-3 rounded-xl transition-all ${favorites.includes(selectedMovie.id)
@@ -2083,7 +1992,6 @@ export default function HomePage() {
                       </button>
                     </div>
 
-                    {/* Overview */}
                     <div className="mb-6">
                       <h3 className="font-semibold text-[var(--foreground)] mb-2">Overview</h3>
                       <p className="text-sm text-[var(--muted)] leading-relaxed">
@@ -2091,7 +1999,6 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {/* Watch Providers / Streaming */}
                     {movieWatchProviders.length > 0 && (
                       <div className="mb-6">
                         <h3 className="font-semibold text-[var(--foreground)] mb-3">Stream on</h3>
@@ -2120,7 +2027,6 @@ export default function HomePage() {
                       </div>
                     )}
 
-                    {/* Cast */}
                     {movieCast.length > 0 && (
                       <div>
                         <h3 className="font-semibold text-[var(--foreground)] mb-3">Cast</h3>
@@ -2156,7 +2062,7 @@ export default function HomePage() {
         )}
       </AnimatePresence>
 
-      {/* Add to Favorites Dialog */}
+      {/* Favorite Prompt */}
       <AnimatePresence>
         {showFavoritePrompt && (
           <motion.div
@@ -2170,7 +2076,7 @@ export default function HomePage() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ ease: [0.25, 0.46, 0.45, 0.94] }}
+              transition={{ ease: easeOut }}
               onClick={(e) => e.stopPropagation()}
               className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 max-w-sm w-full shadow-2xl"
             >
@@ -2215,10 +2121,8 @@ export default function HomePage() {
             className="fixed inset-0 z-50 lg:hidden"
             onClick={() => setShowMobileFilters(false)}
           >
-            {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-            {/* Sheet */}
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -2227,7 +2131,6 @@ export default function HomePage() {
               onClick={(e) => e.stopPropagation()}
               className="absolute bottom-0 left-0 right-0 bg-[var(--card-bg)] border-t border-[var(--card-border)] rounded-t-3xl max-h-[80vh] overflow-y-auto"
             >
-              {/* Handle */}
               <div className="sticky top-0 bg-[var(--card-bg)] pt-3 pb-2 px-4 border-b border-[var(--card-border)]/30">
                 <div className="w-12 h-1.5 bg-[var(--muted)]/30 rounded-full mx-auto mb-3" />
                 <div className="flex items-center justify-between">
@@ -2241,9 +2144,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Filter Options */}
               <div className="p-4 space-y-5">
-                {/* Year Filter */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Year</label>
                   <select
@@ -2258,7 +2159,6 @@ export default function HomePage() {
                   </select>
                 </div>
 
-                {/* Genre Filter */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Genre</label>
                   <select
@@ -2273,7 +2173,6 @@ export default function HomePage() {
                   </select>
                 </div>
 
-                {/* Language Filter */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Language</label>
                   <select
@@ -2288,7 +2187,6 @@ export default function HomePage() {
                   </select>
                 </div>
 
-                {/* Streaming Service Filter */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Streaming Service</label>
                   <select
@@ -2303,7 +2201,6 @@ export default function HomePage() {
                   </select>
                 </div>
 
-                {/* View Mode Toggle */}
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">View Mode</label>
                   <div className="flex gap-2">
@@ -2331,7 +2228,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="sticky bottom-0 p-4 bg-[var(--card-bg)] border-t border-[var(--card-border)]/30 flex gap-3">
                 <button
                   onClick={() => {
@@ -2376,7 +2272,6 @@ export default function HomePage() {
               className="relative flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-colors duration-200"
               whileTap={{ scale: 0.95 }}
             >
-              {/* Active Background Indicator */}
               {activeNav === item.key && (
                 <motion.div
                   layoutId="activeNavBg"
@@ -2385,7 +2280,6 @@ export default function HomePage() {
                 />
               )}
 
-              {/* Icon and Label */}
               <motion.div
                 className="relative z-10 flex flex-col items-center gap-1"
                 animate={{
