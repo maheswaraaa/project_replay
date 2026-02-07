@@ -1,321 +1,206 @@
-"use client";
-
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
-    getTrending,
-    getPopular,
-    getTopRated,
-    getNowPlaying,
-    discoverMovies,
-    searchMovies,
-    getTrendingTV,
-    getPopularTV,
-    getTopRatedTV,
-    getOnTheAirTV,
-    discoverTV,
-    searchTV,
-    getMovieDetails,
-    getTVShowDetails,
+    getTrending, getPopular, getTopRated, getNowPlaying,
+    discoverMovies, searchMovies,
+    getTrendingTV, getPopularTV, getTopRatedTV, getOnTheAirTV,
+    discoverTV, searchTV,
     type Movie,
-    type MediaType,
 } from "@/lib/tmdb";
-import { Tab, NavItem } from "./useFilters";
+import type { Tab, NavItem, MediaTypeFilter } from "@/types";
 
-export interface ContentFilters {
+interface UseMediaContentParams {
     activeTab: Tab;
     activeGenre: number | null;
     activeYear: number | null;
     activeLanguage: string | null;
     activeSortBy: string;
     activeProvider: string | null;
-    activeMediaType: MediaType;
+    activeMediaType: MediaTypeFilter;
     searchQuery: string;
+    activeNav: NavItem;
 }
 
-export interface UseMediaContentReturn {
-    movies: Movie[];
-    loading: boolean;
-    loadingMore: boolean;
-    hasMore: boolean;
-    loadMoreRef: React.RefObject<HTMLDivElement | null>;
-    fetchContent: (pageNum: number, reset?: boolean) => Promise<void>;
+interface TMDBResponse {
+    page: number;
+    results: Movie[];
+    total_pages: number;
+    total_results: number;
 }
 
-export function useMediaContent(
-    filters: ContentFilters,
-    activeNav: NavItem
-): UseMediaContentReturn {
+function mapTVToMovie(tvResults: any[]): Movie[] {
+    return tvResults.map((tv) => ({
+        ...tv,
+        title: tv.name,
+        original_title: tv.original_name,
+        release_date: tv.first_air_date,
+        media_type: "tv" as const,
+    })) as unknown as Movie[];
+}
+
+function applyClientFilters(
+    results: Movie[],
+    {
+        activeYear,
+        activeLanguage,
+        activeGenre,
+    }: {
+        activeYear: number | null;
+        activeLanguage: string | null;
+        activeGenre: number | null;
+    }
+): Movie[] {
+    return results.filter((m) => {
+        if (activeYear) {
+            const year = m.release_date ? parseInt(m.release_date.split("-")[0]) : null;
+            if (year !== activeYear) return false;
+        }
+        if (activeLanguage && m.original_language !== activeLanguage) return false;
+        if (activeGenre && !m.genre_ids?.includes(activeGenre)) return false;
+        return true;
+    });
+}
+
+export function useMediaContent(params: UseMediaContentParams) {
+    const {
+        activeTab, activeGenre, activeYear, activeLanguage,
+        activeSortBy, activeProvider, activeMediaType,
+        searchQuery, activeNav,
+    } = params;
+
     const [movies, setMovies] = useState<Movie[]>([]);
     const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
-
+    const loadMoreRef = useRef<HTMLDivElement>(null);
     const observerRef = useRef<IntersectionObserver | null>(null);
-    const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-    const {
-        activeTab,
-        activeGenre,
-        activeYear,
-        activeLanguage,
-        activeSortBy,
-        activeProvider,
-        activeMediaType,
-        searchQuery,
-    } = filters;
+    const discoverParams = useCallback(() => ({
+        genreId: activeGenre,
+        year: activeYear,
+        language: activeLanguage,
+        watchProviders: activeProvider,
+        sortBy: activeSortBy,
+        page: 1,
+    }), [activeGenre, activeYear, activeLanguage, activeProvider, activeSortBy]);
 
-    const fetchContent = useCallback(
-        async (pageNum: number, reset: boolean = false) => {
-            if (pageNum === 1) setLoading(true);
-            else setLoadingMore(true);
+    const fetchSearchResults = useCallback(async (isTV: boolean, pageNum: number): Promise<TMDBResponse> => {
+        if (activeProvider) {
+            const params = { ...discoverParams(), page: pageNum };
+            let response: TMDBResponse;
 
-            try {
-                let response: {
-                    page: number;
-                    results: Movie[];
-                    total_pages: number;
-                    total_results: number;
-                };
-                const hasFilters =
-                    activeGenre ||
-                    activeYear ||
-                    activeLanguage ||
-                    activeProvider ||
-                    activeSortBy !== "popularity.desc";
-                const isTV = activeMediaType === "tv";
-
-                if (searchQuery && activeNav === "search") {
-                    // If streaming provider is selected, use discover endpoint
-                    if (activeProvider) {
-                        if (isTV) {
-                            const tvResponse = await discoverTV({
-                                genreId: activeGenre,
-                                year: activeYear,
-                                language: activeLanguage,
-                                watchProviders: activeProvider,
-                                sortBy: activeSortBy,
-                                page: pageNum,
-                            });
-                            response = {
-                                ...tvResponse,
-                                results: tvResponse.results.map((tv) => ({
-                                    ...tv,
-                                    title: tv.name,
-                                    original_title: tv.original_name,
-                                    release_date: tv.first_air_date,
-                                    media_type: "tv" as const,
-                                })) as unknown as Movie[],
-                            };
-                        } else {
-                            response = await discoverMovies({
-                                genreId: activeGenre,
-                                year: activeYear,
-                                language: activeLanguage,
-                                watchProviders: activeProvider,
-                                sortBy: activeSortBy,
-                                page: pageNum,
-                            });
-                        }
-
-                        // Client-side filter by search query
-                        const query = searchQuery.toLowerCase();
-                        response = {
-                            ...response,
-                            results: response.results.filter(
-                                (m) =>
-                                    m.title.toLowerCase().includes(query) ||
-                                    m.original_title?.toLowerCase().includes(query)
-                            ),
-                        };
-                    } else {
-                        // No provider filter — use normal search API
-                        if (isTV) {
-                            const tvResponse = await searchTV(searchQuery, pageNum);
-                            response = {
-                                ...tvResponse,
-                                results: tvResponse.results.map((tv) => ({
-                                    ...tv,
-                                    title: tv.name,
-                                    original_title: tv.original_name,
-                                    release_date: tv.first_air_date,
-                                    media_type: "tv" as const,
-                                })) as unknown as Movie[],
-                            };
-                        } else {
-                            response = await searchMovies(searchQuery, pageNum);
-                        }
-
-                        // Client-side filtering for year/language/genre
-                        response = {
-                            ...response,
-                            results: response.results.filter((m) => {
-                                if (activeYear) {
-                                    const releaseYear = m.release_date
-                                        ? parseInt(m.release_date.split("-")[0])
-                                        : null;
-                                    if (releaseYear !== activeYear) return false;
-                                }
-                                if (activeLanguage && m.original_language !== activeLanguage)
-                                    return false;
-                                if (activeGenre && !m.genre_ids?.includes(activeGenre))
-                                    return false;
-                                return true;
-                            }),
-                        };
-                    }
-                } else if (hasFilters) {
-                    if (isTV) {
-                        const tvResponse = await discoverTV({
-                            genreId: activeGenre,
-                            year: activeYear,
-                            language: activeLanguage,
-                            watchProviders: activeProvider,
-                            sortBy: activeSortBy,
-                            page: pageNum,
-                        });
-                        response = {
-                            ...tvResponse,
-                            results: tvResponse.results.map((tv) => ({
-                                ...tv,
-                                title: tv.name,
-                                original_title: tv.original_name,
-                                release_date: tv.first_air_date,
-                                media_type: "tv" as const,
-                            })) as unknown as Movie[],
-                        };
-                    } else {
-                        response = await discoverMovies({
-                            genreId: activeGenre,
-                            year: activeYear,
-                            language: activeLanguage,
-                            watchProviders: activeProvider,
-                            sortBy: activeSortBy,
-                            page: pageNum,
-                        });
-                    }
-                } else {
-                    if (isTV) {
-                        let tvResponse;
-                        switch (activeTab) {
-                            case "popular":
-                                tvResponse = await getPopularTV(pageNum);
-                                break;
-                            case "top_rated":
-                                tvResponse = await getTopRatedTV(pageNum);
-                                break;
-                            case "now_playing":
-                                tvResponse = await getOnTheAirTV(pageNum);
-                                break;
-                            default:
-                                tvResponse = await getTrendingTV("week", pageNum);
-                        }
-                        response = {
-                            ...tvResponse,
-                            results: tvResponse.results.map((tv) => ({
-                                ...tv,
-                                title: tv.name,
-                                original_title: tv.original_name,
-                                release_date: tv.first_air_date,
-                                media_type: "tv" as const,
-                            })) as unknown as Movie[],
-                        };
-                    } else {
-                        switch (activeTab) {
-                            case "popular":
-                                response = await getPopular(pageNum);
-                                break;
-                            case "top_rated":
-                                response = await getTopRated(pageNum);
-                                break;
-                            case "now_playing":
-                                response = await getNowPlaying(pageNum);
-                                break;
-                            default:
-                                response = await getTrending("week", pageNum);
-                        }
-                    }
-                }
-
-                let newMovies = response.results.filter((m) => m.poster_path);
-
-                if (activeYear) {
-                    newMovies = newMovies.filter((m) => {
-                        const releaseYear = m.release_date
-                            ? parseInt(m.release_date.split("-")[0])
-                            : null;
-                        return releaseYear === activeYear;
-                    });
-                }
-
-                if (activeLanguage) {
-                    newMovies = newMovies.filter(
-                        (m) => m.original_language === activeLanguage
-                    );
-                }
-
-                if (activeGenre) {
-                    newMovies = newMovies.filter((m) =>
-                        m.genre_ids?.includes(activeGenre)
-                    );
-                }
-
-                if (reset || pageNum === 1) {
-                    setMovies(newMovies);
-                } else {
-                    setMovies((prev) => {
-                        const existingIds = new Set(prev.map((m) => m.id));
-                        const uniqueNewMovies = newMovies.filter(
-                            (m) => !existingIds.has(m.id)
-                        );
-                        return [...prev, ...uniqueNewMovies];
-                    });
-                }
-
-                setHasMore(response.page < response.total_pages);
-                setPage(response.page);
-            } catch (error) {
-                console.error("Failed to fetch content:", error);
-            } finally {
-                setLoading(false);
-                setLoadingMore(false);
+            if (isTV) {
+                const tvRes = await discoverTV(params);
+                response = { ...tvRes, results: mapTVToMovie(tvRes.results) };
+            } else {
+                response = await discoverMovies(params);
             }
-        },
-        [
-            activeTab,
-            activeGenre,
-            activeYear,
-            activeLanguage,
-            activeSortBy,
-            activeProvider,
-            searchQuery,
-            activeNav,
-            activeMediaType,
-        ]
-    );
 
-    // Fetch content when filters change
+            const query = searchQuery.toLowerCase();
+            response.results = response.results.filter((m) =>
+                m.title.toLowerCase().includes(query) ||
+                m.original_title?.toLowerCase().includes(query)
+            );
+            return response;
+        }
+
+        let response: TMDBResponse;
+        if (isTV) {
+            const tvRes = await searchTV(searchQuery, pageNum);
+            response = { ...tvRes, results: mapTVToMovie(tvRes.results) };
+        } else {
+            response = await searchMovies(searchQuery, pageNum);
+        }
+
+        response.results = applyClientFilters(response.results, { activeYear, activeLanguage, activeGenre });
+        return response;
+    }, [activeProvider, activeGenre, activeYear, activeLanguage, searchQuery, discoverParams]);
+
+    const fetchDiscoverResults = useCallback(async (isTV: boolean, pageNum: number): Promise<TMDBResponse> => {
+        const params = { ...discoverParams(), page: pageNum };
+
+        if (isTV) {
+            const tvRes = await discoverTV(params);
+            return { ...tvRes, results: mapTVToMovie(tvRes.results) };
+        }
+        return discoverMovies(params);
+    }, [discoverParams]);
+
+    const fetchCategoryResults = useCallback(async (isTV: boolean, pageNum: number): Promise<TMDBResponse> => {
+        if (isTV) {
+            const fetchers: Record<Tab, () => Promise<any>> = {
+                popular: () => getPopularTV(pageNum),
+                top_rated: () => getTopRatedTV(pageNum),
+                now_playing: () => getOnTheAirTV(pageNum),
+                trending: () => getTrendingTV("week", pageNum),
+            };
+            const tvRes = await (fetchers[activeTab] || fetchers.trending)();
+            return { ...tvRes, results: mapTVToMovie(tvRes.results) };
+        }
+
+        const fetchers: Record<Tab, () => Promise<TMDBResponse>> = {
+            popular: () => getPopular(pageNum),
+            top_rated: () => getTopRated(pageNum),
+            now_playing: () => getNowPlaying(pageNum),
+            trending: () => getTrending("week", pageNum),
+        };
+        return (fetchers[activeTab] || fetchers.trending)();
+    }, [activeTab]);
+
+    const fetchContent = useCallback(async (pageNum: number, reset = false) => {
+        if (pageNum === 1) setLoading(true);
+        else setLoadingMore(true);
+
+        try {
+            const hasFilters = activeGenre || activeYear || activeLanguage || activeProvider || activeSortBy !== "popularity.desc";
+            const isTV = activeMediaType === "tv";
+            let response: TMDBResponse;
+
+            if (searchQuery && activeNav === "search") {
+                response = await fetchSearchResults(isTV, pageNum);
+            } else if (hasFilters) {
+                response = await fetchDiscoverResults(isTV, pageNum);
+            } else {
+                response = await fetchCategoryResults(isTV, pageNum);
+            }
+
+            let newMovies = response.results.filter((m) => m.poster_path);
+            newMovies = applyClientFilters(newMovies, { activeYear, activeLanguage, activeGenre });
+
+            if (reset || pageNum === 1) {
+                setMovies(newMovies);
+            } else {
+                setMovies((prev) => {
+                    const existingIds = new Set(prev.map((m) => m.id));
+                    return [...prev, ...newMovies.filter((m) => !existingIds.has(m.id))];
+                });
+            }
+
+            setHasMore(response.page < response.total_pages);
+            setPage(response.page);
+        } catch (error) {
+            console.error("Failed to fetch content:", error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [
+        activeGenre, activeYear, activeLanguage, activeSortBy,
+        activeProvider, activeMediaType, searchQuery, activeNav,
+        fetchSearchResults, fetchDiscoverResults, fetchCategoryResults,
+    ]);
+
+    // Reset on filter changes
     useEffect(() => {
         if (activeNav === "library" || activeNav === "profile") return;
         setPage(1);
         setMovies([]);
         fetchContent(1, true);
-    }, [
-        activeTab,
-        activeGenre,
-        activeYear,
-        activeLanguage,
-        activeSortBy,
-        activeProvider,
-        activeNav,
-        activeMediaType,
-        fetchContent,
-    ]);
+    }, [activeTab, activeGenre, activeYear, activeLanguage, activeSortBy, activeProvider, activeNav, activeMediaType, fetchContent]);
 
     // Debounced search
     useEffect(() => {
         if (activeNav !== "search") return;
-
         const timer = setTimeout(() => {
             if (searchQuery) {
                 setPage(1);
@@ -325,11 +210,10 @@ export function useMediaContent(
                 setMovies([]);
             }
         }, 500);
-
         return () => clearTimeout(timer);
     }, [searchQuery, activeNav, fetchContent]);
 
-    // Infinite scroll observer
+    // Infinite scroll
     useEffect(() => {
         if (loading || activeNav === "library" || activeNav === "profile") return;
 
@@ -349,85 +233,5 @@ export function useMediaContent(
         return () => observerRef.current?.disconnect();
     }, [loading, hasMore, loadingMore, page, fetchContent, activeNav]);
 
-    return {
-        movies,
-        loading,
-        loadingMore,
-        hasMore,
-        loadMoreRef,
-        fetchContent,
-    };
-}
-
-// Library content fetching hook
-export interface UseLibraryContentReturn {
-    libraryMovies: Movie[];
-    libraryLoading: boolean;
-}
-
-export function useLibraryContent(
-    activeNav: NavItem,
-    watchlist: number[],
-    watched: number[],
-    favorites: number[]
-): UseLibraryContentReturn {
-    const [libraryMovies, setLibraryMovies] = useState<Movie[]>([]);
-    const [libraryLoading, setLibraryLoading] = useState(false);
-
-    useEffect(() => {
-        const fetchLibraryContent = async () => {
-            if (activeNav !== "library") return;
-
-            const allIds = [...new Set([...watchlist, ...watched, ...favorites])];
-
-            if (allIds.length === 0) {
-                setLibraryMovies([]);
-                return;
-            }
-
-            setLibraryLoading(true);
-
-            const newItems = await Promise.all(
-                allIds.map(async (id) => {
-                    try {
-                        const details = await getMovieDetails(id);
-                        return { ...details, media_type: "movie" } as Movie;
-                    } catch {
-                        try {
-                            const details = await getTVShowDetails(id);
-                            return {
-                                id: details.id,
-                                title: details.name,
-                                original_title: details.original_name,
-                                poster_path: details.poster_path,
-                                backdrop_path: details.backdrop_path,
-                                overview: details.overview,
-                                vote_average: details.vote_average,
-                                vote_count: details.vote_count || 0,
-                                popularity: details.popularity || 0,
-                                adult: false,
-                                release_date: details.first_air_date,
-                                genre_ids: details.genres?.map((g) => g.id) || [],
-                                original_language: details.original_language,
-                                media_type: "tv" as unknown,
-                            } as unknown as Movie;
-                        } catch {
-                            return null;
-                        }
-                    }
-                })
-            );
-
-            const validItems = newItems.filter(Boolean) as Movie[];
-            setLibraryMovies(validItems);
-            setLibraryLoading(false);
-        };
-
-        fetchLibraryContent();
-    }, [activeNav, watchlist, watched, favorites]);
-
-    return {
-        libraryMovies,
-        libraryLoading,
-    };
+    return { movies, loading, loadingMore, hasMore, loadMoreRef };
 }

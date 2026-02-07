@@ -15,6 +15,8 @@ interface MovieListItemProps {
     isFavorite: boolean;
 }
 
+const blurDataURL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBEQCEAwEPwAB//9k=";
+
 export default function MovieListItem({
     movie,
     onOpenDetail,
@@ -97,6 +99,9 @@ export default function MovieListItem({
                             src={getImageUrl(movie.poster_path, "w200") || ""}
                             alt={movie.title}
                             fill
+                            loading="lazy"
+                            placeholder="blur"
+                            blurDataURL={blurDataURL}
                             className="object-cover"
                         />
                     ) : (
